@@ -23,7 +23,10 @@ export interface PipelineConfig {
   livePreview: boolean;
 }
 
-export type TranscribeFn = (wav: Blob, opts: { model: string; language: string; prompt?: string }) => Promise<string>;
+export type TranscribeFn = (
+  wav: Blob,
+  opts: { model: string; language: string; prompt?: string; preview?: boolean },
+) => Promise<string>;
 
 export interface Latency {
   chunkSec: number;
@@ -326,12 +329,22 @@ export class CaptionPipeline {
     this.previewStartedAt = now;
     this.finalsDuringPreview = [];
     this.counts.previews++;
-    this.transcribe(wav, { model: this.cfg.profile.model, language: this.cfg.language, prompt: prompt || undefined })
+    this.transcribe(wav, {
+      model: this.cfg.profile.model,
+      language: this.cfg.language,
+      prompt: prompt || undefined,
+      preview: true,
+    })
       .then((raw) => {
         if (generation === this.previewGeneration) this.onPreviewResult(raw, start, end, prompt);
       })
-      .catch(() => {
-        /* previews are best effort; the final result still comes */
+      .catch((e: unknown) => {
+        // Previews are best effort; the final result still comes. When every
+        // request slot was busy, nothing was sent: try again on the next packet.
+        if ((e as { kind?: string })?.kind === "busy" && generation === this.previewGeneration) {
+          this.counts.previews--;
+          this.previewStartedAt = -Infinity;
+        }
       })
       .finally(() => {
         if (generation === this.previewGeneration) this.previewInFlight = false;

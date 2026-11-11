@@ -71,8 +71,10 @@ pipeline, UI, or extension.
 * Live preview (on by default): while speech is in progress, transcribe the not-yet-final audio about once a second
   (one request at a time) and show it as grey provisional text. Final in-order results replace it, and the covered
   part of the preview is trimmed. Previews are **never written to the transcript**.
-* Run 3–4 requests in parallel with sequence numbers, and always output in order. Retry a request once, then skip it.
-  The UI must never freeze.
+* Run final-chunk requests in parallel with sequence numbers, and always output in order. Never run more than **3**
+  Puter requests at once in total, previews included, because that's Puter's free-plan limit. Final chunks wait for a
+  slot, and previews only start when a slot is free. Retry a `429` after a short wait. Retry a failed request once,
+  then skip it. The UI must never freeze.
 * Clean the output: fix spacing, punctuation and capitalization across chunk boundaries, and filter hallucinations
   ("Thank you for watching.", "Subtitles by…", repeated phrases).
 * The Priority setting (Accuracy / Balanced / Speed) controls the chunk lengths (`profile.ts`).

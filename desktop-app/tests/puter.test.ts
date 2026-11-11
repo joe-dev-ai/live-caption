@@ -75,3 +75,55 @@ test("a refused context prompt is dropped and the request retried", async () => 
   assert.equal(await transcribeWithPuter(wav, { model: "", language: "en", prompt: "Earlier text." }), "no prompt needed");
   assert.deepEqual(calls, [{ language: "en", prompt: "Earlier text." }, { language: "en" }]);
 });
+
+test("never more than 3 Puter requests at once; final chunks wait for a free slot", async () => {
+  let running = 0;
+  let peak = 0;
+  fakePuter(async () => {
+    running++;
+    peak = Math.max(peak, running);
+    await new Promise((r) => setTimeout(r, 20));
+    running--;
+    return { text: "ok" };
+  });
+  const results = await Promise.all(Array.from({ length: 6 }, () => transcribeWithPuter(wav, { model: "", language: "en" })));
+  assert.deepEqual(results, Array(6).fill("ok"));
+  assert.equal(peak, 3);
+});
+
+test("a preview is skipped (not queued) while all slots are busy", async () => {
+  const unblock: (() => void)[] = [];
+  const calls = fakePuter(async () => {
+    await new Promise<void>((r) => unblock.push(r));
+    return { text: "done" };
+  });
+  const finals = [1, 2, 3].map(() => transcribeWithPuter(wav, { model: "", language: "en" }));
+  await new Promise((r) => setTimeout(r, 5));
+  await assert.rejects(
+    transcribeWithPuter(wav, { model: "", language: "en", preview: true }),
+    (e: { kind?: string }) => e.kind === "busy",
+  );
+  assert.equal(calls.length, 3, "the preview sent nothing");
+  unblock.forEach((r) => r());
+  assert.deepEqual(await Promise.all(finals), ["done", "done", "done"]);
+});
+
+test("a final chunk refused with 429 waits and retries; a preview does not", async () => {
+  let attempts = 0;
+  const calls = fakePuter(async () => {
+    attempts++;
+    if (attempts === 1) throw { success: false, error: { code: "too_many_requests", message: "Too many requests" } };
+    return { text: "after retry" };
+  });
+  const t0 = Date.now();
+  assert.equal(await transcribeWithPuter(wav, { model: "", language: "en" }), "after retry");
+  assert.ok(Date.now() - t0 >= 900, "backed off before retrying");
+  assert.equal(calls.length, 2);
+
+  attempts = 0;
+  await assert.rejects(
+    transcribeWithPuter(wav, { model: "", language: "en", preview: true }),
+    (e: { kind?: string }) => e.kind === "rate_limit",
+  );
+  assert.equal(calls.length, 3, "preview tried once");
+});

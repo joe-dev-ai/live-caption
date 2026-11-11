@@ -1,6 +1,8 @@
 // Thin typed wrapper around Puter.js (https://js.puter.com/v2/).
 // Only Puter's cloud speech-to-text is used — no local recognition models.
 
+import { RequestLimiter } from "./limiter.ts";
+
 export interface PuterUser {
   username?: string;
 }
@@ -25,7 +27,15 @@ declare global {
 
 export const PUTER_SRC = "https://js.puter.com/v2/";
 
-export type SttErrorKind = "auth" | "quota" | "model" | "bad_request" | "network" | "unknown";
+export type SttErrorKind =
+  | "auth"
+  | "quota"
+  | "rate_limit"
+  | "busy"
+  | "model"
+  | "bad_request"
+  | "network"
+  | "unknown";
 
 export class SttError extends Error {
   kind: SttErrorKind;
@@ -106,6 +116,7 @@ export function classifyError(e: unknown): SttError {
   // Show the code too: a bare message such as a model id says little on its own.
   const msg = code && !text.includes(code) ? `${text} (${code})` : text;
   if (/insufficient|funds|usage.?limit|quota|credits|402|payment/i.test(raw)) return new SttError("quota", msg);
+  if (/429|too_many_requests|too many requests|rate.?limit/i.test(raw)) return new SttError("rate_limit", msg);
   if (/auth|sign.?in|signed.?in|token|401|403|unauthori[sz]ed|forbidden|session/i.test(raw)) return new SttError("auth", msg);
   if (MODEL_ERROR.test(raw)) return new SttError("model", msg);
   if (/bad_request|400|invalid|unsupported/i.test(raw)) return new SttError("bad_request", msg);
@@ -132,7 +143,17 @@ export interface TranscribeOptions {
   model: string;
   language: string;
   prompt?: string;
+  /** Live preview: skip (error kind "busy") instead of waiting when all request slots are in use. */
+  preview?: boolean;
 }
+
+/** Puter's free plan runs at most 3 speech-to-text requests per user at once. */
+export const PUTER_MAX_CONCURRENT = 3;
+const slots = new RequestLimiter(PUTER_MAX_CONCURRENT);
+/** A request refused with 429 waits this long (times the attempt) and tries again. */
+const RATE_LIMIT_BACKOFF_MS = 1000;
+const RATE_LIMIT_RETRIES = 2;
+const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
 
 /** Whether the provider rejected the `prompt` option; then we stop sending it. */
 let promptUnsupported = false;
@@ -148,18 +169,35 @@ export function onModelFallback(listener: ((model: string, reason: string) => vo
 export async function transcribeWithPuter(wav: Blob, o: TranscribeOptions): Promise<string> {
   const puter = window.puter;
   if (!puter) throw new SttError("network", "Puter.js is not loaded");
+  const release = o.preview ? slots.tryAcquire() : await slots.acquire();
+  if (!release) throw new SttError("busy", "All Puter request slots are in use");
+  try {
+    return await callSpeech2txt(puter, wav, o);
+  } finally {
+    release();
+  }
+}
+
+async function callSpeech2txt(puter: PuterApi, wav: Blob, o: TranscribeOptions): Promise<string> {
   const options: Record<string, unknown> = { language: o.language };
   if (o.model && !rejectedModels.has(o.model)) options.model = o.model;
   if (o.prompt && !promptUnsupported) options.prompt = o.prompt;
-  // Optional settings that Puter refuses are dropped and the request is
-  // retried; every retry removes one option, so this loop always ends.
+  let rateLimited = 0;
+  // Each retry either drops an optional setting Puter refused or waits out a
+  // rate limit a bounded number of times, so this loop always ends.
   for (;;) {
     try {
       return extractText(await puter.ai.speech2txt(wav, { ...options }));
     } catch (e) {
       const err = classifyError(e);
+      if (err.kind === "rate_limit" && !o.preview && rateLimited < RATE_LIMIT_RETRIES) {
+        rateLimited++;
+        await sleep(RATE_LIMIT_BACKOFF_MS * rateLimited);
+        continue;
+      }
       const model = typeof options.model === "string" ? options.model : "";
-      const usageProblem = err.kind === "quota" || err.kind === "auth" || err.kind === "network";
+      const usageProblem =
+        err.kind === "quota" || err.kind === "auth" || err.kind === "network" || err.kind === "rate_limit";
       if (model && !usageProblem && (err.kind === "model" || err.message.includes(model))) {
         rejectedModels.add(model);
         modelFallbackListener?.(model, err.message);

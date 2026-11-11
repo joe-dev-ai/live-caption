@@ -37,7 +37,7 @@ pub struct Settings {
     pub model: String,
     /// Pass the last sentence(s) as a prompt to keep names/terms consistent.
     pub use_context_prompt: bool,
-    /// Maximum parallel transcription requests (1..=4).
+    /// Maximum parallel final-chunk requests (1..=3: Puter's free plan allows 3 at once).
     pub max_parallel: u32,
     /// Show provisional captions while speech is still in progress.
     pub live_preview: bool,
@@ -99,7 +99,7 @@ impl Default for Settings {
 impl Settings {
     /// Clamp values that come from the UI into safe ranges.
     pub fn sanitized(mut self) -> Self {
-        self.max_parallel = self.max_parallel.clamp(1, 4);
+        self.max_parallel = self.max_parallel.clamp(1, 3);
         self.font_size = self.font_size.clamp(12, 72);
         self.bg_opacity = self.bg_opacity.clamp(0.0, 1.0);
         if self.bridge_port < 1024 {
@@ -238,7 +238,7 @@ mod tests {
             ..Default::default()
         }
         .sanitized();
-        assert_eq!(s.max_parallel, 4);
+        assert_eq!(s.max_parallel, 3);
         assert_eq!(s.font_size, 12);
         assert!(!s.pairing_token.is_empty());
     }

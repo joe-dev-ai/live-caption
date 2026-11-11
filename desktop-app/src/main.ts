@@ -108,6 +108,8 @@ function createPipeline(s: Settings): CaptionPipeline {
       } else if (err.kind === "quota") {
         stop();
         setBanner({ text: `Puter usage limit reached: ${err.message}`, error: true });
+      } else if (err.kind === "rate_limit") {
+        flash("Puter's request limit was reached — skipped a chunk");
       } else {
         flash(err.kind === "network" ? "Network error — skipped a chunk" : `Skipped a chunk: ${err.message}`);
       }

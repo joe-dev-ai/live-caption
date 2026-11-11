@@ -168,7 +168,7 @@ Changes save automatically and apply right away. They are stored in
 | | Model: **Auto** (Puter's default speech-to-text model, currently `gpt-transcribe`) or `gpt-transcribe`. If Puter refuses a chosen model, the default is used automatically. | Auto |
 | | Live preview: grey provisional text while speech is in progress (uses more Puter requests) | On |
 | | Use recent text as context (sends the last 1–2 sentences as the prompt) | On |
-| | Parallel requests (1–4) | 3 |
+| | Parallel requests for final text (1–3; Puter's free plan allows 3 at once in total, live previews included) | 3 |
 | Type into Chrome | On/off, **Type the live preview immediately** (fastest; corrected in place), pairing token (Copy / New token), local port | On, on, random token, 47821 |
 | Hotkeys | Start/Stop, Show/Hide, Typing on/off (click a field, press the keys; Backspace clears it) | see above |
 | Appearance | Font size, background opacity, debug info. The caption area keeps the whole session: scroll up to reread, and click **Latest** to jump back | 26 px, 60 %, off |
@@ -216,9 +216,11 @@ delay (average and p90), the average speech→text delay, requests in flight, an
   provisional text in place: only the changed characters are replaced. The extension only edits text it typed itself,
   and only while that text is still exactly what precedes the cursor. If you typed, moved the cursor or sent the
   message, it leaves that text alone and types only the words that are new.
-* **Parallel and ordered** (`scheduler.ts`): sends up to 3–4 requests at once, numbers them in sequence, and always
-  outputs in order. Each request has a 12 s timeout, is retried once, and is then skipped, so the stream never
-  stalls.
+* **Parallel and ordered** (`scheduler.ts`, `limiter.ts`): sends several requests at once, numbers them in sequence,
+  and always outputs in order. Each request has a 12 s timeout, is retried once, and is then skipped, so the stream
+  never stalls. In total, at most 3 requests run at once, which is Puter's free-plan limit. Final chunks wait for a
+  free slot; a live preview only starts when a slot is free. A request refused with `429` (too many requests) waits a
+  moment and tries again.
 * **Clean-up** (`postprocess.ts`) does the following:
   * removes common silence hallucinations ("Thank you for watching.", "Subtitles by…", Amara.org,
     "please subscribe", wrong-script output, and prompt echoes),
@@ -279,7 +281,7 @@ Chrome typing without a Puter account or credits.
 ## 8. Developer tests
 
 ```bash
-# Front end: VAD/chunking, post-processing, ordered scheduler, WAV, WER, pipeline, Puter wrapper, caption view, typing planner (51 tests)
+# Front end: VAD/chunking, post-processing, ordered scheduler, WAV, WER, pipeline, Puter wrapper, caption view, typing planner, request limiter (56 tests)
 cd desktop-app
 npm test
 npm run typecheck
