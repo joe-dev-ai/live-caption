@@ -73,8 +73,8 @@ interface Job {
 const HISTORY = 30;
 /** Minimum time between the starts of two preview requests. */
 export const PREVIEW_INTERVAL_MS = 1000;
-/** Only preview once this much speech has been heard in the current chunk. */
-const PREVIEW_MIN_SPEECH_SEC = 0.5;
+/** Send the first preview once this much speech has been heard. */
+const PREVIEW_MIN_SPEECH_SEC = 0.3;
 /** Previews cover at most this much of the most recent audio. */
 const PREVIEW_MAX_SEC = 8;
 
@@ -149,8 +149,8 @@ export class CaptionPipeline {
   private readonly now: () => number;
   private readonly recent = new RecentAudio();
   private samplesIn = 0;
-  /** Start sample of every chunk sent for final transcription and not finished yet. */
-  private readonly pendingStarts = new Map<number, number>();
+  /** Chunks sent for final transcription and not finished yet. */
+  private readonly pending = new Map<number, { start: number; speechSec: number }>();
   /** End sample of the latest chunk whose final result has been handled. */
   private finalizedEnd = 0;
   private preview: { text: string; end: number } | null = null;
@@ -212,7 +212,7 @@ export class CaptionPipeline {
     this.counts = { chunks: 0, filtered: 0, failed: 0, previews: 0 };
     this.recent.reset();
     this.samplesIn = 0;
-    this.pendingStarts.clear();
+    this.pending.clear();
     this.finalizedEnd = 0;
     this.previewGeneration++;
     this.previewInFlight = false;
@@ -245,7 +245,7 @@ export class CaptionPipeline {
 
   private onChunk(chunk: AudioChunk): void {
     this.counts.chunks++;
-    this.pendingStarts.set(chunk.id, chunk.startSample);
+    this.pending.set(chunk.id, { start: chunk.startSample, speechSec: chunk.speechSec });
     const wav = new Blob([encodeWav(normalize(chunk.samples), SAMPLE_RATE)], { type: "audio/wav" });
     this.scheduler.push({
       chunk,
@@ -273,7 +273,7 @@ export class CaptionPipeline {
   }
 
   private onDone(job: Job, raw: string | null, error: unknown): void {
-    this.pendingStarts.delete(job.chunk.id);
+    this.pending.delete(job.chunk.id);
     this.finalizedEnd = Math.max(this.finalizedEnd, job.chunk.endSample);
     if (raw === null) {
       this.counts.failed++;
@@ -317,10 +317,18 @@ export class CaptionPipeline {
     // Cover all audio without final text yet: chunks still being transcribed
     // plus the one being recorded.
     let start = active.startSample;
-    for (const s of this.pendingStarts.values()) start = Math.min(start, s);
+    let speechSec = active.speechSec;
+    for (const p of this.pending.values()) {
+      start = Math.min(start, p.start);
+      speechSec += p.speechSec;
+    }
     const end = this.samplesIn;
     start = Math.max(start, end - PREVIEW_MAX_SEC * SAMPLE_RATE, this.recent.start, this.finalizedEnd);
     if (end - start < PREVIEW_MIN_SPEECH_SEC * SAMPLE_RATE) return;
+    // How much of the window is speech, so the hallucination filter can drop
+    // the "Thank you." that models like to return for very short clips.
+    const windowSec = (end - start) / SAMPLE_RATE;
+    const speech = { sec: Math.min(speechSec, windowSec), ratio: Math.min(1, speechSec / windowSec) };
 
     const wav = new Blob([encodeWav(normalize(this.recent.slice(start, end)), SAMPLE_RATE)], { type: "audio/wav" });
     const generation = this.previewGeneration;
@@ -336,7 +344,7 @@ export class CaptionPipeline {
       preview: true,
     })
       .then((raw) => {
-        if (generation === this.previewGeneration) this.onPreviewResult(raw, start, end, prompt);
+        if (generation === this.previewGeneration) this.onPreviewResult(raw, start, end, prompt, speech);
       })
       .catch((e: unknown) => {
         // Previews are best effort; the final result still comes. When every
@@ -351,15 +359,21 @@ export class CaptionPipeline {
       });
   }
 
-  private onPreviewResult(raw: string, start: number, end: number, prompt: string): void {
+  private onPreviewResult(
+    raw: string,
+    start: number,
+    end: number,
+    prompt: string,
+    speech: { sec: number; ratio: number },
+  ): void {
     if (end <= this.finalizedEnd) return; // final text already covers it all
     const asChunk: AudioChunk = {
       id: 0,
       samples: new Float32Array(0),
       startSample: start,
       endSample: end,
-      speechSec: (end - start) / SAMPLE_RATE,
-      speechRatio: 1,
+      speechSec: speech.sec,
+      speechRatio: speech.ratio,
       end: "forced", // speech is still going on
       continuesSentence: false,
       overlapSec: 0,

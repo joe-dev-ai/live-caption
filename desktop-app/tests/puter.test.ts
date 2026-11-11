@@ -1,12 +1,12 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { modelLabel, profileFor } from "../src/pipeline/profile.ts";
-import { classifyError, onModelFallback, transcribeWithPuter, type PuterApi } from "../src/pipeline/puter.ts";
+import { classifyError, onModelFallback, transcribeWithPuter, warmUpPuter, type PuterApi } from "../src/pipeline/puter.ts";
 
 type Call = Record<string, unknown>;
 
 /** Install a fake `window.puter` whose speech2txt is `impl`; returns the recorded options. */
-function fakePuter(impl: (opts: Call) => Promise<unknown>): Call[] {
+function fakePuter(impl: (opts: Call) => Promise<unknown>, signedIn = true): Call[] {
   const calls: Call[] = [];
   const puter = {
     ai: {
@@ -15,7 +15,7 @@ function fakePuter(impl: (opts: Call) => Promise<unknown>): Call[] {
         return impl(opts ?? {});
       },
     },
-    auth: { signIn: async () => ({}), signOut: () => {}, isSignedIn: () => true, getUser: async () => ({}) },
+    auth: { signIn: async () => ({}), signOut: () => {}, isSignedIn: () => signedIn, getUser: async () => ({}) },
   } satisfies PuterApi;
   Object.defineProperty(globalThis, "window", { value: { puter }, configurable: true, writable: true });
   return calls;
@@ -126,4 +126,13 @@ test("a final chunk refused with 429 waits and retries; a preview does not", asy
     (e: { kind?: string }) => e.kind === "rate_limit",
   );
   assert.equal(calls.length, 3, "preview tried once");
+});
+
+test("warm-up sends one free test-mode request, and nothing when signed out", async () => {
+  const calls = fakePuter(async () => ({ text: "sample" }));
+  await warmUpPuter();
+  assert.deepEqual(calls, [{ test_mode: true }]);
+  const none = fakePuter(async () => ({ text: "sample" }), false);
+  await warmUpPuter();
+  assert.equal(none.length, 0);
 });

@@ -208,11 +208,13 @@ delay (average and p90), the average speech→text delay, requests in flight, an
 * **Puter.js** (`puter.ts`): calls `puter.ai.speech2txt(wav, { language, prompt })`. With Model set to Auto, no model
   is sent, so Puter uses its current default (`gpt-transcribe`). If Puter refuses a chosen model, the app switches to
   the default and says so once; if a model rejects the `prompt` option, the app stops sending it.
-* **Live preview** (`pipeline.ts`): while speech is in progress, all audio that has no final text yet is transcribed
-  about once a second (one request at a time) and shown in grey. When a final chunk arrives, the part of the preview
-  it covers is removed so words never appear twice. Previews are never saved to the transcript.
-* **Live typing** (`typing.ts`, `content.js`): with **Type the live preview immediately** on, the preview minus its last
-  word (usually still being spoken) is typed into Chrome right away. Each update and each final result corrects that
+* **Live preview** (`pipeline.ts`): once 0.3 s of speech has been heard, all audio that has no final text yet is
+  transcribed about once a second (one request at a time) and shown in grey. When a final chunk arrives, the part of
+  the preview it covers is removed so words never appear twice. Previews are never saved to the transcript. When
+  you press Start, a free Puter test-mode request warms up the connection, so the first real request doesn't pay
+  for connection setup.
+* **Live typing** (`typing.ts`, `content.js`): with **Type the live preview immediately** on, the whole preview is
+  typed into Chrome right away. A last word that was cut off ("wor") is usually completed by just appending letters. Each update and each final result corrects that
   provisional text in place: only the changed characters are replaced. The extension only edits text it typed itself,
   and only while that text is still exactly what precedes the cursor. If you typed, moved the cursor or sent the
   message, it leaves that text alone and types only the words that are new.
@@ -281,7 +283,7 @@ Chrome typing without a Puter account or credits.
 ## 8. Developer tests
 
 ```bash
-# Front end: VAD/chunking, post-processing, ordered scheduler, WAV, WER, pipeline, Puter wrapper, caption view, typing planner, request limiter (56 tests)
+# Front end: VAD/chunking, post-processing, ordered scheduler, WAV, WER, pipeline, Puter wrapper, caption view, typing planner, request limiter (58 tests)
 cd desktop-app
 npm test
 npm run typecheck
@@ -300,7 +302,7 @@ cargo run --example bridge_server -- 47821 TEST-TOKE-N123-4567
 ## 9. Known limitations
 
 * **Delay.** Puter's free speech-to-text takes whole audio files, not a live stream (Puter's streaming API needs a
-  paid plan). Live preview shows words roughly 1 s plus Puter's response time after they are spoken, and the final
+  paid plan). Live preview shows the first words about 0.3 s plus Puter's response time after speech starts, and the final
   text follows within about 2–3 s. Turn on **Show debug info** to see Puter's response time ("API") on your
   connection. Live preview sends extra requests; turn it off in Settings to use fewer.
 * **Puter sign-in and usage.** You need a Puter account. Usage is billed to it under Puter's user-pays model, and

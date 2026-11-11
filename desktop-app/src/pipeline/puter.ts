@@ -2,6 +2,7 @@
 // Only Puter's cloud speech-to-text is used — no local recognition models.
 
 import { RequestLimiter } from "./limiter.ts";
+import { encodeWav } from "./wav.ts";
 
 export interface PuterUser {
   username?: string;
@@ -164,6 +165,27 @@ let modelFallbackListener: ((model: string, reason: string) => void) | null = nu
 /** Be told (once per model) when a chosen model is refused and the default is used. */
 export function onModelFallback(listener: ((model: string, reason: string) => void) | null): void {
   modelFallbackListener = listener;
+}
+
+/**
+ * Make the first real request fast. The first call after Start otherwise
+ * pays for connection setup and Puter's sign-in checks on top of the
+ * transcription itself. Puter's test mode runs the same request path but
+ * returns a sample without using any of the user's allowance.
+ */
+export async function warmUpPuter(): Promise<void> {
+  const puter = window.puter;
+  if (!puter?.auth.isSignedIn()) return;
+  const release = slots.tryAcquire();
+  if (!release) return;
+  try {
+    const silence = new Blob([encodeWav(new Float32Array(1600), 16000)], { type: "audio/wav" });
+    await puter.ai.speech2txt(silence, { test_mode: true });
+  } catch {
+    // Best effort: the real requests work without it.
+  } finally {
+    release();
+  }
 }
 
 export async function transcribeWithPuter(wav: Blob, o: TranscribeOptions): Promise<string> {

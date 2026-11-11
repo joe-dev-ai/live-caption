@@ -1,11 +1,11 @@
 // Decides what to send to the Chrome extension.
 //
 // Final caption text is always sent as it arrives. With live typing on, each
-// message also carries the provisional tail: the current live preview minus
-// its last word, which is usually still being spoken and most likely to
-// change. The extension types that tail right away and corrects it in place
-// when a newer message arrives, so text shows up in Chrome as early as
-// possible without waiting for the final result.
+// message also carries the provisional tail: the complete current live
+// preview. The extension types it right away and corrects it in place when a
+// newer message arrives, so text shows up in Chrome as early as possible
+// without waiting for the final result. The last word may still be cut off
+// ("wor"), but its correction is nearly always just the missing letters.
 
 export interface TypingMessage {
   seq: number;
@@ -13,12 +13,6 @@ export interface TypingMessage {
   text: string;
   /** Complete not-yet-final tail; absent when live typing is off. */
   provisional?: string;
-}
-
-/** The preview without its last word (which is usually still being spoken). */
-export function stablePreview(preview: string): string {
-  const words = preview.trim().split(/\s+/).filter(Boolean);
-  return words.length > 1 ? words.slice(0, -1).join(" ") : "";
 }
 
 export class TypingPlanner {
@@ -81,7 +75,7 @@ export class TypingPlanner {
       if (text) this.send({ seq: ++this.seq, text });
       return;
     }
-    const provisional = stablePreview(this.preview);
+    const provisional = this.preview.trim();
     if (!text && provisional === this.sentProvisional) return;
     this.sentProvisional = provisional;
     this.send({ seq: ++this.seq, text, provisional });

@@ -68,9 +68,10 @@ pipeline, UI, or extension.
   0.2 s of overlap, then remove the duplicated words afterwards.
 * Pass the last 1–2 sentences as the `prompt` context, and drop the prompt quietly if the provider rejects it. Always
   set the language explicitly. Apply light normalization. Skip silent chunks.
-* Live preview (on by default): while speech is in progress, transcribe the not-yet-final audio about once a second
+* Live preview (on by default): from 0.3 s of speech on, transcribe the not-yet-final audio about once a second
   (one request at a time) and show it as grey provisional text. Final in-order results replace it, and the covered
-  part of the preview is trimmed. Previews are **never written to the transcript**.
+  part of the preview is trimmed. Previews are **never written to the transcript**. On Start, warm up Puter with a
+  free test-mode request.
 * Run final-chunk requests in parallel with sequence numbers, and always output in order. Never run more than **3**
   Puter requests at once in total, previews included, because that's Puter's free-plan limit. Final chunks wait for a
   slot, and previews only start when a slot is free. Retry a `429` after a short wait. Retry a failed request once,
@@ -81,7 +82,7 @@ pipeline, UI, or extension.
 
 **Typing into Chrome**
 * Text is inserted only while captioning is ON and **Type into Chrome** is enabled.
-* Live typing ("Type the live preview immediately", on by default): the preview minus its last word is typed at once
+* Live typing ("Type the live preview immediately", on by default): the whole preview is typed at once
   and corrected in place by later updates, replacing only the changed characters. The extension may only edit text
   it typed itself, and only while that text is still exactly what precedes the caret. Otherwise it must leave the
   page text alone and type only the words not typed before. Final text is never deleted.

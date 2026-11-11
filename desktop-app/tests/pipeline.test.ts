@@ -67,16 +67,18 @@ function wordsFor(wav: Blob): string {
 
 type Event = { kind: "preview" | "final"; text: string };
 
-function previewPipeline(livePreview: boolean, delayMs = 3) {
+function previewPipeline(livePreview: boolean, delayMs = 3, reply: (wav: Blob) => string = wordsFor) {
   const events: Event[] = [];
+  const previewCalls: number[] = [];
   let calls = 0;
   let clock = 0;
   const pipeline = new CaptionPipeline(
     { profile: profileFor("balanced", "auto"), language: "en", useContextPrompt: false, maxParallel: 3, livePreview },
-    async (wav) => {
+    async (wav, opts) => {
       calls++;
+      if (opts.preview) previewCalls.push(clock);
       await sleep(delayMs);
-      return wordsFor(wav);
+      return reply(wav);
     },
     {
       onText: (text) => events.push({ kind: "final", text }),
@@ -95,7 +97,7 @@ function previewPipeline(livePreview: boolean, delayMs = 3) {
       await sleep(5);
     }
   }
-  return { pipeline, events, play, calls: () => calls };
+  return { pipeline, events, play, calls: () => calls, previewCalls };
 }
 
 test("live preview shows text while speech is in progress, then gives way to the final text", async () => {
@@ -128,4 +130,22 @@ test("a preview that returns after Stop is ignored", async () => {
   const afterReset = events.length;
   await sleep(150);
   assert.ok(events.slice(afterReset).every((e) => e.kind === "preview" && e.text === ""), JSON.stringify(events.slice(afterReset)));
+});
+
+test("the first preview is requested after about 0.3 s of speech", async () => {
+  const { play, previewCalls } = previewPipeline(true);
+  // Speech starts at 0.3 s.
+  await play(concat(silence(0.3), speech(1.5), silence(1.2)));
+  assert.ok(previewCalls.length >= 1);
+  assert.ok(previewCalls[0] <= 700, `first preview at ${previewCalls[0]} ms of audio`);
+});
+
+test("a very short preview that only says \"Thank you.\" is not shown", async () => {
+  // Models often return "Thank you." for a split second of audio.
+  const reply = (wav: Blob) => ((wav.size - 44) / 32000 < 0.9 ? "Thank you." : wordsFor(wav));
+  const { events, play } = previewPipeline(true, 3, reply);
+  await play(concat(silence(0.3), speech(2.0), silence(1.2)));
+  await sleep(50);
+  assert.ok(!events.some((e) => e.kind === "preview" && /thank you/i.test(e.text)), JSON.stringify(events));
+  assert.ok(events.some((e) => e.kind === "preview" && e.text.startsWith("w1")), "longer previews are shown");
 });

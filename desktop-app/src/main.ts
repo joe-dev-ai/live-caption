@@ -8,7 +8,7 @@ import type { AckResult, BridgeAck, BridgeStatus, CaptureStatus, JumpStatus, Put
 import { CaptionPipeline, type PipelineConfig, type PipelineStats } from "./pipeline/pipeline.ts";
 import { modelLabel, profileFor } from "./pipeline/profile.ts";
 import { fakeTranscribe } from "./pipeline/fake-stt.ts";
-import { classifyError, loadPuter, onModelFallback, transcribeWithPuter } from "./pipeline/puter.ts";
+import { classifyError, loadPuter, onModelFallback, transcribeWithPuter, warmUpPuter } from "./pipeline/puter.ts";
 import { TypingPlanner } from "./pipeline/typing.ts";
 import { wordErrorRate } from "./pipeline/wer.ts";
 import { CaptionView } from "./ui/captions.ts";
@@ -157,6 +157,8 @@ async function start(fromClick: boolean): Promise<void> {
   const session = state.session;
   const s = state.settings;
   void backend.setCaptioning(true, s.typeIntoChrome, session);
+  // Free test-mode request so the first real one doesn't pay for connection setup.
+  if (!state.fakeStt) void warmUpPuter();
 
   const channel = newAudioChannel();
   channel.onmessage = (data) => {
