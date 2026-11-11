@@ -175,6 +175,25 @@ fn app_info(state: State<AppState>) -> AppInfo {
     }
 }
 
+/// Problems registering the configured hotkeys, in plain language.
+#[tauri::command]
+fn hotkey_errors(state: State<AppState>) -> Vec<String> {
+    state.hotkey_errors.lock().unwrap().clone()
+}
+
+/// Release the global hotkeys while the user records a new one in Settings
+/// (otherwise pressing a registered combination triggers it instead of
+/// reaching the page), and register them again afterwards.
+#[tauri::command]
+fn suspend_hotkeys(app: AppHandle, state: State<AppState>, suspended: bool) {
+    if suspended {
+        let _ = app.global_shortcut().unregister_all();
+    } else {
+        let s = state.settings.lock().unwrap().clone();
+        register_hotkeys(&app, &s);
+    }
+}
+
 #[tauri::command]
 fn open_settings(app: AppHandle) {
     open_settings_window(&app);
@@ -239,29 +258,25 @@ fn apply_settings(app: &AppHandle, state: &AppState, new: Settings) -> Result<Se
         register_hotkeys(app, &new);
     }
     let _ = app.emit("settings-changed", &new);
-    let errors = state.hotkey_errors.lock().unwrap().clone();
-    if errors.is_empty() {
-        Ok(new)
-    } else {
-        Err(format!("Settings saved, but: {}", errors.join("; ")))
-    }
+    Ok(new)
 }
 
 fn register_hotkeys(app: &AppHandle, s: &Settings) {
     let gs = app.global_shortcut();
     let _ = gs.unregister_all();
     let mut errors = Vec::new();
-    let bindings: [(&str, &str); 3] = [
-        (&s.hotkey_toggle, "toggle"),
-        (&s.hotkey_show_hide, "show_hide"),
-        (&s.hotkey_typing, "typing"),
+    let bindings: [(&str, &str, &str); 3] = [
+        ("Start / Stop", &s.hotkey_toggle, "toggle"),
+        ("Show / Hide", &s.hotkey_show_hide, "show_hide"),
+        ("Typing on/off", &s.hotkey_typing, "typing"),
     ];
-    for (keys, action) in bindings {
-        if keys.trim().is_empty() {
+    for (label, keys, action) in bindings {
+        let keys = keys.trim();
+        if keys.is_empty() {
             continue;
         }
         let action = action.to_string();
-        let result = gs.on_shortcut(keys.trim(), move |app, _shortcut, event| {
+        let result = gs.on_shortcut(keys, move |app, _shortcut, event| {
             if event.state() != ShortcutState::Pressed {
                 return;
             }
@@ -275,10 +290,19 @@ fn register_hotkeys(app: &AppHandle, s: &Settings) {
             }
         });
         if let Err(e) = result {
-            errors.push(format!("hotkey \"{keys}\" could not be registered ({e})"));
+            errors.push(hotkey_problem(label, keys, &e.to_string()));
         }
     }
     *app.state::<AppState>().hotkey_errors.lock().unwrap() = errors;
+}
+
+/// Plain-language explanation of why a hotkey could not be registered.
+fn hotkey_problem(action: &str, keys: &str, error: &str) -> String {
+    if error.to_lowercase().contains("already registered") {
+        format!("{action}: {keys} is already used by another program. Choose a different hotkey.")
+    } else {
+        format!("{action}: {keys} can't be used as a hotkey ({error}).")
+    }
 }
 
 fn toggle_typing(app: &AppHandle) {
@@ -322,13 +346,24 @@ pub(crate) fn open_settings_window(app: &AppHandle) {
         if app.get_webview_window("settings").is_some() {
             return; // a second click already created it
         }
-        let _ = WebviewWindowBuilder::new(&app, "settings", WebviewUrl::App("settings.html".into()))
+        let built = WebviewWindowBuilder::new(&app, "settings", WebviewUrl::App("settings.html".into()))
             .title("Live Caption Overlay — Settings")
             .inner_size(560.0, 760.0)
             .min_inner_size(420.0, 420.0)
             .always_on_top(true)
             .center()
             .build();
+        if let Ok(window) = built {
+            // Closing Settings while a hotkey field was being recorded must
+            // not leave the hotkeys switched off.
+            let app = app.clone();
+            window.on_window_event(move |event| {
+                if let WindowEvent::Destroyed = event {
+                    let s = app.state::<AppState>().settings.lock().unwrap().clone();
+                    register_hotkeys(&app, &s);
+                }
+            });
+        }
     });
 }
 
@@ -478,6 +513,8 @@ pub fn run() {
             bridge_status,
             jump_status,
             app_info,
+            hotkey_errors,
+            suspend_hotkeys,
             open_settings,
             hide_overlay,
             transcript_begin,
@@ -496,4 +533,24 @@ pub fn run() {
                 }
             }
         });
+}
+
+#[cfg(test)]
+mod tests {
+    use super::hotkey_problem;
+
+    #[test]
+    fn hotkey_problems_are_explained_plainly() {
+        let taken = hotkey_problem(
+            "Start / Stop",
+            "Ctrl+Alt+S",
+            "HotKey already registered: HotKey { mods: Modifiers(ALT | CONTROL), key: KeyS, id: 589861 }",
+        );
+        assert_eq!(
+            taken,
+            "Start / Stop: Ctrl+Alt+S is already used by another program. Choose a different hotkey."
+        );
+        let invalid = hotkey_problem("Show / Hide", "Tab+Q", "Couldn't recognize \"Tab\" as a valid key");
+        assert!(invalid.starts_with("Show / Hide: Tab+Q can't be used as a hotkey"));
+    }
 }

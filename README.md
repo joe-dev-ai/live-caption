@@ -109,12 +109,12 @@ Extension icon states:
 
 ### Captioning and typing
 
-* Click **▶ Start** or press **Ctrl+Alt+S** (from any app, including Chrome) to start.
+* Click **▶ Start** or press **Ctrl+Alt+Q** (from any app, including Chrome) to start.
 * Speech from the remote computer appears as captions within about 2–3 s. The newest line is at the bottom.
 * While captioning is running and **Type into Chrome** is on, each finished caption chunk is inserted at the caret
   of the focused field in the active Chrome tab, with spaces added between chunks automatically. Click into a
   chat box or document in Chrome and the text appears there. Enter is never pressed and nothing is submitted.
-* Click **■ Stop** or press **Ctrl+Alt+S** again. Typing stops at once, and any queued or in-flight text is
+* Click **■ Stop** or press **Ctrl+Alt+Q** again. Typing stops at once, and any queued or in-flight text is
   discarded.
 * Clicking the overlay is designed not to take keyboard focus away from Chrome (see *Known limitations*). For
   hands-free control, use the hotkeys.
@@ -141,7 +141,7 @@ Left-click the tray icon to show or hide the overlay.
 
 | Hotkey | Action |
 | --- | --- |
-| Ctrl+Alt+S | Start / Stop captioning |
+| Ctrl+Alt+Q | Start / Stop captioning |
 | Ctrl+Alt+H | Show / Hide the overlay |
 | Ctrl+Alt+T | Turn typing into Chrome on or off |
 
@@ -318,7 +318,7 @@ cargo run --example bridge_server -- 47821 TEST-TOKE-N123-4567
 | Chrome chip says "Chrome offline" | Make sure the extension is installed and paired. Click its icon, then **Reconnect**. If you changed the port, enter the same port in the popup. |
 | "Cannot listen on 127.0.0.1:47821" | Another program uses the port. Change Settings → Type into Chrome → Local port, and enter the same port in the popup. |
 | "No text field focused" | Click into a text box in the active Chrome tab. Password fields are never typed into. |
-| Hotkey doesn't work | Another app may already use it. Pick a different combination in Settings; the overlay shows a message if registration fails. |
+| Hotkey doesn't work, or Settings says it "is already used by another program" | Another program owns that combination. Pick a different one in Settings → Global hotkeys (click the field, press the keys). Use Ctrl/Alt/Shift/Win plus a key; plain keys such as Tab can't be global hotkeys. On keyboards where AltGr = Ctrl+Alt (e.g. German), avoid Ctrl+Alt combinations that type characters, such as Ctrl+Alt+Q (@). |
 
 ## Credits
 

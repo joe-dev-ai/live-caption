@@ -46,7 +46,16 @@ function update(patch: Partial<Settings>, delay = 250): void {
     } catch (e) {
       setSaveState(errorText(e), true);
     }
+    await renderHotkeyErrors();
   }, delay);
+}
+
+/** Show hotkeys that could not be registered (e.g. taken by another program). */
+async function renderHotkeyErrors(): Promise<void> {
+  const errors = await backend.hotkeyErrors().catch(() => [] as string[]);
+  const el = $("hotkey-errors");
+  el.hidden = errors.length === 0;
+  el.textContent = errors.join(" ");
 }
 
 function formatValue(key: NumKey, v: number): string {
@@ -122,7 +131,7 @@ function renderPuter(p: PuterStatus): void {
   $<HTMLButtonElement>("puter-signout").disabled = !p.signedIn;
 }
 
-/** Convert a keydown into an accelerator string such as "Ctrl+Alt+S". */
+/** Convert a keydown into an accelerator string such as "Ctrl+Alt+Q". */
 function accelerator(e: KeyboardEvent): string | null {
   const code = e.code;
   let key: string | null = null;
@@ -181,10 +190,14 @@ function wire(): void {
     el.addEventListener("focus", () => {
       el.classList.add("recording");
       el.value = "Press keys…";
+      // Otherwise a combination that is already registered would trigger
+      // its action instead of reaching this field.
+      void backend.suspendHotkeys(true);
     });
     el.addEventListener("blur", () => {
       el.classList.remove("recording");
       el.value = settings[key];
+      void backend.suspendHotkeys(false).then(renderHotkeyErrors);
     });
     el.addEventListener("keydown", (e) => {
       e.preventDefault();
@@ -243,6 +256,7 @@ async function main(): Promise<void> {
   renderBridge(bridge);
   renderJump(jump);
   renderPuter({ loaded: false, signedIn: false });
+  await renderHotkeyErrors();
   $("version").textContent = `Live Caption Overlay ${info.version} · ${info.os}${info.testAudio ? ` · test audio: ${info.testAudio}` : ""}`;
   await Promise.all([
     on<Settings>("settings-changed", (next) => {

@@ -57,6 +57,11 @@ pub struct Settings {
 
 pub const DEFAULT_JUMP_NAMES: &str = "JumpDesktop.exe, JumpClient.exe, JumpWinClient.exe";
 
+/// Start/Stop hotkey. Ctrl+Alt+S, the first default, is often taken by other
+/// programs, so saved settings still using it move to this one.
+pub const DEFAULT_TOGGLE_HOTKEY: &str = "Ctrl+Alt+Q";
+const OLD_DEFAULT_TOGGLE_HOTKEY: &str = "Ctrl+Alt+S";
+
 /// Models earlier versions offered that Puter no longer lists. Saved settings
 /// that still name one switch to "auto" (Puter's default model).
 const RETIRED_MODELS: [&str; 3] = ["gpt-4o-transcribe", "gpt-4o-mini-transcribe", "whisper-1"];
@@ -74,7 +79,7 @@ impl Default for Settings {
             type_into_chrome: true,
             bridge_port: 47821,
             pairing_token: String::new(),
-            hotkey_toggle: "Ctrl+Alt+S".into(),
+            hotkey_toggle: DEFAULT_TOGGLE_HOTKEY.into(),
             hotkey_show_hide: "Ctrl+Alt+H".into(),
             hotkey_typing: "Ctrl+Alt+T".into(),
             font_size: 26,
@@ -104,6 +109,9 @@ impl Settings {
         self.model = self.model.trim().to_string();
         if self.model.is_empty() || RETIRED_MODELS.contains(&self.model.as_str()) {
             self.model = "auto".into();
+        }
+        if self.hotkey_toggle == OLD_DEFAULT_TOGGLE_HOTKEY {
+            self.hotkey_toggle = DEFAULT_TOGGLE_HOTKEY.into();
         }
         if self.jump_process_names.trim().is_empty() {
             self.jump_process_names = DEFAULT_JUMP_NAMES.into();
@@ -201,6 +209,22 @@ mod tests {
         }
         .sanitized();
         assert_eq!(kept.model, "gpt-transcribe");
+    }
+
+    #[test]
+    fn old_default_hotkey_moves_to_new_default() {
+        let s = Settings {
+            hotkey_toggle: "Ctrl+Alt+S".into(),
+            ..Default::default()
+        }
+        .sanitized();
+        assert_eq!(s.hotkey_toggle, "Ctrl+Alt+Q");
+        let custom = Settings {
+            hotkey_toggle: "Ctrl+Shift+F9".into(),
+            ..Default::default()
+        }
+        .sanitized();
+        assert_eq!(custom.hotkey_toggle, "Ctrl+Shift+F9");
     }
 
     #[test]

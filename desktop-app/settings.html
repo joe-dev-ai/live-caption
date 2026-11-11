@@ -89,7 +89,11 @@
 
       <section class="card">
         <h2>Global hotkeys</h2>
-        <p class="hint">Click a field, then press the key combination. Backspace clears it.</p>
+        <p class="hint">
+          Click a field, then press the key combination. Backspace clears it. Use Ctrl, Alt, Shift or Win plus a key:
+          Windows doesn't allow plain keys such as Tab as global hotkeys.
+        </p>
+        <p class="hint warn" id="hotkey-errors" hidden></p>
         <label class="field"><span class="label">Start / Stop captioning</span><input type="text" class="hotkey" id="hotkeyToggle" readonly /></label>
         <label class="field"><span class="label">Show / Hide overlay</span><input type="text" class="hotkey" id="hotkeyShowHide" readonly /></label>
         <label class="field"><span class="label">Typing into Chrome on/off</span><input type="text" class="hotkey" id="hotkeyTyping" readonly /></label>

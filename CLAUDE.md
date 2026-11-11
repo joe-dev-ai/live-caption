@@ -96,7 +96,9 @@ pipeline, UI, or extension.
 * The overlay is frameless, transparent, adjustable in opacity, always on top, resizable from all edges, and
   draggable by the top bar. Size, position and settings are remembered between launches.
 * The overlay must **never steal keyboard focus from Chrome**: keep `focusable(false)` and the Windows focus guard.
-  Global hotkeys are configurable (default Ctrl+Alt+S for Start/Stop).
+  Global hotkeys are configurable (default Ctrl+Alt+Q for Start/Stop). Never use a plain key or an Alt-only
+  combination as a default: Windows can't register plain keys, and Alt-only combinations move Chrome's focus to its
+  menu.
 * Tray menu: Show/Hide, Start/Stop, Settings, Quit. Closing the window hides it to the tray. The tray icon changes
   while captioning is active.
 
