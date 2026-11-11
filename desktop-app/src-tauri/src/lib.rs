@@ -313,13 +313,23 @@ pub(crate) fn open_settings_window(app: &AppHandle) {
         let _ = w.set_focus();
         return;
     }
-    let _ = WebviewWindowBuilder::new(app, "settings", WebviewUrl::App("settings.html".into()))
-        .title("Live Caption Overlay — Settings")
-        .inner_size(560.0, 760.0)
-        .min_inner_size(420.0, 420.0)
-        .always_on_top(true)
-        .center()
-        .build();
+    // Callers run on the main thread (the overlay's Settings command and the
+    // tray menu handler). On Windows, building a web view there deadlocks
+    // WebView2 and leaves an empty white window, so build it on a worker
+    // thread; Tauri forwards the native calls to the main thread itself.
+    let app = app.clone();
+    tauri::async_runtime::spawn(async move {
+        if app.get_webview_window("settings").is_some() {
+            return; // a second click already created it
+        }
+        let _ = WebviewWindowBuilder::new(&app, "settings", WebviewUrl::App("settings.html".into()))
+            .title("Live Caption Overlay — Settings")
+            .inner_size(560.0, 760.0)
+            .min_inner_size(420.0, 420.0)
+            .always_on_top(true)
+            .center()
+            .build();
+    });
 }
 
 /// `window.open` handler for the overlay: Puter's sign-in flow opens a popup
