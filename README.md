@@ -49,6 +49,11 @@ npm run tauri dev
 
 The first `tauri dev` compiles the Rust back end, which takes a few minutes. Later runs are fast.
 
+The app opens **its own window**: a transparent caption bar near the top-left of your main screen, plus a **CC** icon
+in the system tray (look under the **^** arrow). It is not a website. The Vite dev server on
+`http://127.0.0.1:1420` only feeds that window, and opening it in a normal browser shows an empty bar because the
+page needs the desktop app around it.
+
 ### Build the installer
 
 ```bash
@@ -304,6 +309,9 @@ cargo run --example bridge_server -- 47821 TEST-TOKE-N123-4567
 
 | Problem | Fix |
 | --- | --- |
+| `program not found` when running `npm run tauri dev` | Rust isn't installed or isn't on PATH. Install the C++ Build Tools and Rust (see Requirements), restart Windows, and check `cargo --version`. |
+| `tauri dev` keeps printing "Waiting for your frontend dev server" | Make sure `desktop-app/vite.config.ts` has `host: "127.0.0.1"` and `tauri.conf.json` has `"devUrl": "http://127.0.0.1:1420"`, and that nothing else uses port 1420. |
+| `http://localhost:1420` in a browser shows an empty bar | Expected: the UI only works inside the app window. Look for the caption bar on screen and the CC tray icon. |
 | "Jump Desktop not detected" | Make sure Jump Desktop is running and connected. Check its process name in Task Manager → Details and add it under Settings → Audio capture → Advanced. Or switch to **All system audio**. |
 | No captions, status says Listening | Check that the remote computer's audio plays locally through Jump Desktop, not on the remote machine. Check that Jump Desktop isn't muted in the Windows volume mixer. Try All system audio. |
 | Chrome chip says "Chrome offline" | Make sure the extension is installed and paired. Click its icon, then **Reconnect**. If you changed the port, enter the same port in the popup. |
