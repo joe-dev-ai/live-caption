@@ -1,10 +1,22 @@
 // Caption overlay window: owns the captioning session (Start/Stop), runs the
-// transcription pipeline, renders captions and forwards text to Chrome.
+// speech engine (Chrome's speech recognition through the extension, or the
+// Puter pipeline), renders captions and forwards text to Chrome.
 
 import "./styles/overlay.css";
 import { getCurrentWindow } from "@tauri-apps/api/window";
 import { backend, broadcast, errorText, newAudioChannel, on } from "./lib/backend.ts";
-import type { AckResult, BridgeAck, BridgeStatus, CaptureStatus, JumpStatus, PuterStatus, Settings } from "./lib/types.ts";
+import type {
+  AckResult,
+  BridgeAck,
+  BridgeStatus,
+  CaptureStatus,
+  JumpStatus,
+  ListenerStatus,
+  PuterStatus,
+  Settings,
+  SpeechEvent,
+} from "./lib/types.ts";
+import { ChromeSpeech, speechLang, type SpeechStats } from "./pipeline/chrome-speech.ts";
 import { CaptionPipeline, type PipelineConfig, type PipelineStats } from "./pipeline/pipeline.ts";
 import { modelLabel, profileFor } from "./pipeline/profile.ts";
 import { fakeTranscribe } from "./pipeline/fake-stt.ts";
@@ -52,7 +64,7 @@ const state = {
   session: 0,
   inFlight: 0,
   capture: null as CaptureStatus | null,
-  bridge: { listening: false, port: 0, clients: 0 } as BridgeStatus,
+  bridge: { listening: false, port: 0, clients: 0, listeners: 0 } as BridgeStatus,
   jump: { supported: false, detected: false } as JumpStatus,
   puter: { loaded: false, signedIn: false } as PuterStatus,
   testAudio: null as string | null,
@@ -65,7 +77,12 @@ const state = {
   transient: null as { text: string; until: number; kind: "info" | "warn" } | null,
   banner: null as Banner,
   stats: null as PipelineStats | null,
+  /** Chrome engine: the extension's speech page and its timing. */
+  listener: null as ListenerStatus | null,
+  speechStats: null as SpeechStats | null,
 };
+
+const chromeEngine = () => state.settings?.engine === "chrome";
 
 // ------------------------------------------------------------ pipeline
 
@@ -89,19 +106,35 @@ const typing = new TypingPlanner(
   () => !!state.settings?.livePreview && !!state.settings?.typePreview,
 );
 
+/** Final caption text from either engine: shown, typed and saved. */
+function emitFinal(text: string): void {
+  if (!state.active) return;
+  state.sessionText += ` ${text}`;
+  captions.append(text);
+  typing.final(text);
+  if (state.settings?.saveTranscript) void backend.transcriptAppend(`[${clock()}] ${text}`).catch(() => {});
+}
+
+/** Provisional text from either engine (never saved). */
+function showPreview(text: string): void {
+  captions.setPreview(state.active ? text : "");
+  typing.previewChanged(state.active ? text : "");
+}
+
+/** Chrome engine: Chrome sends interim text anyway; Live preview decides whether it is shown. */
+const speech = new ChromeSpeech({
+  onText: emitFinal,
+  onPreview: (text) => showPreview(state.settings?.livePreview ? text : ""),
+  onStats: (stats) => {
+    state.speechStats = stats;
+    renderDebug();
+  },
+});
+
 function createPipeline(s: Settings): CaptionPipeline {
   return new CaptionPipeline(pipelineConfig(s), state.fakeStt ? fakeTranscribe : transcribeWithPuter, {
-    onText: (text) => {
-      if (!state.active) return;
-      state.sessionText += ` ${text}`;
-      captions.append(text);
-      typing.final(text);
-      if (state.settings?.saveTranscript) void backend.transcriptAppend(`[${clock()}] ${text}`).catch(() => {});
-    },
-    onPreview: (text) => {
-      captions.setPreview(state.active ? text : "");
-      typing.previewChanged(state.active ? text : "");
-    },
+    onText: emitFinal,
+    onPreview: showPreview,
     onBusy: (n) => {
       state.inFlight = n;
       render();
@@ -137,9 +170,10 @@ function createPipeline(s: Settings): CaptionPipeline {
 
 async function start(fromClick: boolean): Promise<void> {
   if (state.active || !state.settings) return;
+  const useChrome = state.settings.engine === "chrome";
   const puter = window.puter;
-  if (state.fakeStt) {
-    // Offline test mode: no Puter account needed.
+  if (useChrome || state.fakeStt) {
+    // Chrome's speech recognition and the offline test mode need no Puter account.
   } else if (!puter) {
     setBanner({ text: "Puter.js is not loaded yet.", action: { label: "Retry", run: () => void initPuter() }, error: true });
     return;
@@ -161,22 +195,27 @@ async function start(fromClick: boolean): Promise<void> {
   state.lastAck = null;
   state.sessionText = "";
   state.testFinishedAt = 0;
+  state.listener = null;
   clearBannerIf((b) => !b?.error);
+  const s = state.settings;
   pipeline?.reset();
+  speech.reset();
+  speech.setLanguage(s.language);
   typing.reset();
   render(); // instant feedback
 
   const session = state.session;
-  const s = state.settings;
-  void backend.setCaptioning(true, s.typeIntoChrome, session);
+  // With the Chrome engine the Rust side also streams the audio to the extension's speech page.
+  void backend.setCaptioning(true, s.typeIntoChrome, useChrome, speechLang(s.language), session);
   // Free test-mode request so the first real one doesn't pay for connection setup.
-  if (!state.fakeStt) void warmUpPuter();
+  if (!useChrome && !state.fakeStt) void warmUpPuter();
 
   const channel = newAudioChannel();
   channel.onmessage = (data) => {
     if (!state.active || state.session !== session) return;
     const pcm = data instanceof ArrayBuffer ? new Int16Array(data) : Int16Array.from(data as number[]);
-    pipeline?.pushPcm(pcm);
+    if (useChrome) speech.pushPcm(pcm);
+    else pipeline?.pushPcm(pcm);
   };
   try {
     await backend.startCapture(channel);
@@ -198,12 +237,13 @@ function stop(): void {
   state.active = false;
   state.session = 0;
   state.inFlight = 0;
-  void backend.setCaptioning(false, false, 0);
+  void backend.setCaptioning(false, false, false, speechLang(state.settings?.language ?? "en"), 0);
   pipeline?.reset();
+  speech.reset();
   typing.reset();
   void backend.stopCapture();
   render();
-  void refreshAllowance();
+  if (!chromeEngine()) void refreshAllowance();
 }
 
 function toggle(fromClick: boolean): void {
@@ -212,6 +252,15 @@ function toggle(fromClick: boolean): void {
 }
 
 // ------------------------------------------------------------- Puter
+
+let puterStarted = false;
+
+/** Puter.js is loaded only once the Puter engine is used. */
+function ensurePuter(): void {
+  if (puterStarted || state.fakeStt) return;
+  puterStarted = true;
+  void initPuter();
+}
 
 async function initPuter(): Promise<void> {
   clearBannerIf((b) => !!b?.text.includes("Puter.js"));
@@ -252,7 +301,7 @@ let lowAllowanceWarned = false;
 
 /** Read this month's Puter allowance, share it with Settings, and warn once when it runs low. */
 async function refreshAllowance(): Promise<void> {
-  if (state.fakeStt) return;
+  if (state.fakeStt || chromeEngine()) return;
   allowanceReadAt = Date.now();
   state.puter.allowance = await getAllowance();
   publishPuter();
@@ -319,6 +368,15 @@ const ACK_TEXT: Partial<Record<AckResult, string>> = {
   error: "Typing into Chrome failed",
 };
 
+/** Chrome's speech recognition error codes, in plain words. */
+const LISTENER_ERRORS: Record<string, string> = {
+  network: "Chrome speech: no connection (install the on-device model)",
+  "not-allowed": "Chrome refused speech recognition",
+  "service-not-allowed": "Chrome refused speech recognition",
+  "language-not-supported": "Chrome can't recognize this language",
+  "audio-capture": "Chrome couldn't read the audio",
+};
+
 function statusInfo(): { kind: string; text: string } {
   const now = Date.now();
   const transient = state.transient && state.transient.until > now ? state.transient : null;
@@ -331,6 +389,13 @@ function statusInfo(): { kind: string; text: string } {
   if (state.capture?.state === "waiting") return { kind: "warn", text: state.capture.message };
   if (state.capture?.state === "finished" && state.inFlight === 0) return { kind: "listening", text: state.capture.message };
   if (transient) return { kind: transient.kind, text: transient.text };
+  if (chromeEngine()) {
+    if (!state.bridge.listeners) {
+      return { kind: "warn", text: state.bridge.clients ? "Starting Chrome speech…" : "Chrome extension not connected" };
+    }
+    const l = state.listener;
+    if (l?.state === "error") return { kind: "error", text: LISTENER_ERRORS[l.detail] ?? `Chrome speech: ${l.detail}` };
+  }
   const ack = state.lastAck;
   if (ack && ack.result !== "inserted" && ack.result !== "inactive" && now - ack.at < 4000) {
     return { kind: "warn", text: ACK_TEXT[ack.result] ?? "Not typing" };
@@ -404,8 +469,16 @@ function renderDebug(): void {
   const show = !!state.settings?.showDebug;
   ui.debug.hidden = !show;
   if (!show) return;
-  const st = state.stats;
   const sec = (ms: number) => (ms / 1000).toFixed(2) + " s";
+  if (chromeEngine()) {
+    const sp = state.speechStats;
+    const engine = `Chrome speech${state.listener ? ` (${state.listener.mode})` : ""}`;
+    ui.debug.textContent = sp?.finals
+      ? `${engine} · avg speech→first words ${sec(sp.avgFirstWordsMs)} · words→final ${sec(sp.avgFinalizeMs)} · finals ${sp.finals}`
+      : `${engine} · debug: waiting for speech…`;
+    return;
+  }
+  const st = state.stats;
   const prof = state.settings ? profileFor(state.settings.priority, state.settings.model) : null;
   ui.debug.textContent = st && st.chunks
     ? `${modelLabel(prof?.model ?? "")} · chunk ${st.avgChunkSec.toFixed(1)} s · API ${sec(st.avgApiMs)} · end→text ${sec(st.avgEndToTextMs)} ` +
@@ -431,15 +504,29 @@ function flash(text: string, ms = 3500, kind: "info" | "warn" = "warn"): void {
 
 // -------------------------------------------------------- accuracy test
 
+/** Delay summary for the accuracy test report. */
+function delaySummary(): string {
+  const s = (ms: number) => `${(ms / 1000).toFixed(2)} s`;
+  if (chromeEngine()) {
+    const sp = state.speechStats;
+    return sp?.finals
+      ? `avg speech→first words ${s(sp.avgFirstWordsMs)}, words→final ${s(sp.avgFinalizeMs)}`
+      : "no speech recognised";
+  }
+  const st = state.stats;
+  return st && st.chunks
+    ? `avg speech→text ${s(st.avgWordDelayMs)}, end→text ${s(st.avgEndToTextMs)} (p90 ${s(st.p90EndToTextMs)}), API ${s(st.avgApiMs)}`
+    : "no speech recognised";
+}
+
 /** After a test file ends and all requests finished, report WER and delay. */
 function maybeReportTest(): void {
   if (!state.active || !state.testFinishedAt || state.inFlight > 0) return;
+  // Chrome finalizes the last words shortly after the audio ends.
+  if (chromeEngine() && speech.pending && Date.now() - state.testFinishedAt < 8000) return;
   if (Date.now() - state.testFinishedAt < 3000) return;
   state.testFinishedAt = 0;
-  const st = state.stats;
-  const delay = st && st.chunks
-    ? `avg speech→text ${(st.avgWordDelayMs / 1000).toFixed(2)} s, end→text ${(st.avgEndToTextMs / 1000).toFixed(2)} s (p90 ${(st.p90EndToTextMs / 1000).toFixed(2)} s), API ${(st.avgApiMs / 1000).toFixed(2)} s`
-    : "no speech recognised";
+  const delay = delaySummary();
   let text = `Test finished: ${delay}.`;
   if (state.reference) {
     const r = wordErrorRate(state.reference, state.sessionText);
@@ -473,14 +560,21 @@ async function applySettings(next: Settings): Promise<void> {
   applyAppearance(next);
   if (!pipeline) pipeline = createPipeline(next);
   else pipeline.configure(pipelineConfig(next));
+  if (next.engine === "puter") ensurePuter();
+  else clearBannerIf((b) => !!b && !b.error && b.text.includes("Puter"));
   if (state.active && prev) {
-    if (prev.typeIntoChrome !== next.typeIntoChrome) {
-      void backend.setCaptioning(true, next.typeIntoChrome, state.session);
-    }
-    // A different audio source needs a fresh capture session.
-    if (prev.captureMode !== next.captureMode || prev.jumpProcessNames !== next.jumpProcessNames) {
+    const restart =
+      prev.engine !== next.engine ||
+      // A different audio source needs a fresh capture session.
+      prev.captureMode !== next.captureMode ||
+      prev.jumpProcessNames !== next.jumpProcessNames;
+    if (restart) {
       stop();
       void start(false);
+    } else if (prev.typeIntoChrome !== next.typeIntoChrome || prev.language !== next.language) {
+      speech.setLanguage(next.language);
+      const listen = next.engine === "chrome";
+      void backend.setCaptioning(true, next.typeIntoChrome, listen, speechLang(next.language), state.session);
     }
   }
   render();
@@ -543,7 +637,7 @@ function wireUi(): void {
   setInterval(() => {
     if (!state.active) return;
     maybeReportTest();
-    if (Date.now() - allowanceReadAt > ALLOWANCE_REFRESH_MS) void refreshAllowance();
+    if (!chromeEngine() && Date.now() - allowanceReadAt > ALLOWANCE_REFRESH_MS) void refreshAllowance();
     render();
   }, 1000);
 }
@@ -583,6 +677,17 @@ async function main(): Promise<void> {
       state.capture = s;
       render();
     }),
+    on<SpeechEvent>("bridge-speech", (m) => {
+      if (!state.active || !chromeEngine() || m.session !== state.session) return;
+      speech.update(String(m.final ?? ""), String(m.interim ?? ""));
+    }),
+    on<ListenerStatus>("bridge-listener", (l) => {
+      if (!state.active || !chromeEngine()) return;
+      state.listener = l;
+      // e.g. "on-device recognition unavailable, using online recognition"
+      if (l.detail && l.state !== "error") flash(`Chrome speech: ${l.detail}`, 6000, "info");
+      render();
+    }),
     on<BridgeAck>("bridge-ack", (ack) => {
       if (!state.active || ack.session !== state.session) return;
       state.lastAck = { result: ack.result, at: Date.now() };
@@ -601,11 +706,9 @@ async function main(): Promise<void> {
     }),
   ]);
   render();
-  if (state.fakeStt) {
+  if (state.fakeStt && !chromeEngine()) {
     setBanner({ text: "Offline test mode (LCO_FAKE_STT=1): placeholder text instead of real transcription." });
-    return;
   }
-  await initPuter();
 }
 
 void main();

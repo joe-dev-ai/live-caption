@@ -8,12 +8,14 @@ git policy. If a request conflicts with them, stop and ask the owner before goin
 The project is a lightweight Windows desktop utility plus a companion Chrome extension:
 
 1. It captures the audio that **Jump Desktop** streams from a remote computer and plays on this PC.
-2. It transcribes that audio with high accuracy and low delay using the **Puter.js** speech-to-text API.
+2. It transcribes that audio with high accuracy and low delay, using **Chrome's built-in speech recognition** through
+   the companion extension (default, free and unlimited) or the **Puter.js** speech-to-text API (option).
 3. It shows live captions in a **transparent, always-on-top overlay** window.
 4. While captioning is running, it **types the finalized text into the focused input or textarea of the active Chrome
    tab** through the companion extension.
 
-Flow: remote computer → Jump Desktop → local PC → capture → chunk → Puter STT → overlay + Chrome extension.
+Flow: remote computer → Jump Desktop → local PC → capture → speech engine (Chrome: bridge → extension speech page;
+Puter: chunk → Puter STT) → overlay + Chrome extension.
 
 ## 2. Repository layout
 
@@ -22,11 +24,11 @@ Flow: remote computer → Jump Desktop → local PC → capture → chunk → Pu
 | `desktop-app/src-tauri/src/audio/` | Rust audio capture: WASAPI process loopback (Jump Desktop) and system loopback, resampling to 16 kHz mono 16-bit PCM, WAV test source |
 | `desktop-app/src-tauri/src/bridge.rs` | Rust WebSocket bridge to the extension (127.0.0.1 only, pairing token) |
 | `desktop-app/src-tauri/src/{lib,settings,tray,focus,process,transcript}.rs` | Tauri commands, settings persistence, tray, focus guard, Jump Desktop process lookup, transcript file |
-| `desktop-app/src/pipeline/` | Front-end transcription pipeline: VAD, chunker, WAV encoding, Puter wrapper, ordered scheduler, post-processing, WER. Pure TypeScript with **no Tauri imports**, so it stays unit-testable |
+| `desktop-app/src/pipeline/` | Front-end transcription: Chrome-engine results (`chrome-speech.ts`) and the Puter pipeline (VAD, chunker, WAV encoding, Puter wrapper, ordered scheduler, post-processing, WER). Pure TypeScript with **no Tauri imports**, so it stays unit-testable |
 | `desktop-app/src/main.ts`, `settings-main.ts`, `styles/`, `ui/` | Overlay UI and settings window |
 | `desktop-app/tests/` | Front-end unit tests (`node --test`) |
 | `desktop-app/src-tauri/tests/`, `examples/` | Rust integration tests and the standalone bridge server |
-| `chrome-extension/` | Manifest V3 extension: `background.js`, `content.js`, popup |
+| `chrome-extension/` | Manifest V3 extension: `background.js`, `content.js`, speech page (`listener.html`/`listener.js`), popup |
 
 Keep this separation. New code goes into the layer it belongs to: Rust capture, WebSocket bridge, front-end
 pipeline, UI, or extension.
@@ -35,15 +37,17 @@ pipeline, UI, or extension.
 
 * **Desktop app:** Tauri v2 (Rust back end + system web view). Front end: TypeScript + Vite, vanilla. No UI
   frameworks or heavy UI libraries.
-* **Speech-to-text:** **Puter.js only**, loaded from `https://js.puter.com/v2/` and called through
-  `puter.ai.speech2txt()`.
-  * Never add a local speech-recognition model or another STT provider.
-  * Input is WAV chunks: Puter has no live streaming.
+* **Speech-to-text:** exactly two engines, chosen in Settings (**Speech engine**). Never add another provider or a
+  bundled local model.
+  * **Chrome** (default): Chrome's built-in Web Speech API (`SpeechRecognition`), run by the extension's speech page
+    on the captured audio. Free, no account, no monthly limit.
+  * **Puter** (option): Puter.js, loaded from `https://js.puter.com/v2/` only when this engine is used, and called
+    through `puter.ai.speech2txt()`. Input is WAV chunks: Puter has no live streaming.
   * Sign-in uses Puter's "user-pays" popup flow and must stay clear and explicit in the UI.
   * The owner uses a **free** Puter account and must never pay: never buy credits or upgrade, and keep the extra
     usage of features visible. Settings shows the monthly allowance (`puter.auth.getMonthlyUsage()`), and the
     overlay warns once when less than 10% is left.
-* **Models:** use Puter's default speech-to-text model (currently `gpt-transcribe`) by sending **no** `model`
+* **Puter models:** use Puter's default speech-to-text model (currently `gpt-transcribe`) by sending **no** `model`
   option when Model is "Auto". Puter retired the `gpt-4o-transcribe` / `gpt-4o-mini-transcribe` / `whisper-1` models
   the app first used. An explicitly chosen model that Puter refuses must fall back to the default automatically,
   never skip chunks.
@@ -52,9 +56,12 @@ pipeline, UI, or extension.
   * Never add `package.json` or `node_modules` to `chrome-extension/`: Chrome refuses extensions that contain names
     starting with `_`.
   * `content.js` must not use `chrome.*` APIs, so it keeps working in already-open tabs after an update.
+  * The speech page runs as an offscreen document, which only gets `chrome.runtime` messaging (no `getManifest()`,
+    no `chrome.storage`): it gets its configuration from the service worker by message.
 * **UI style:** Material Design 3 tokens, with Material Symbols inlined as SVG in `src/ui/icons.ts`. Use no icon fonts
   and no CDN assets except Puter.js.
-* **Target OS:** Windows 10 2004+ / Windows 11. Default caption language: English (`en`).
+* **Target OS:** Windows 10 2004+ / Windows 11. Default caption language: English (`en`). Chrome 135+ for the Chrome
+  engine (on-device recognition: 139+).
 
 ## 4. Product requirements that must never regress
 
@@ -64,7 +71,20 @@ pipeline, UI, or extension.
 * Output is 16 kHz mono 16-bit PCM, sent in 100 ms packets. During silence, pad with silent audio so chunks still close
   on time.
 
-**Transcription pipeline**
+**Chrome speech engine**
+* While captioning with this engine, the bridge streams the 100 ms PCM packets as binary frames to speech-page
+  clients only, and only while listening is on. Stop closes the speech page at once.
+* The speech page runs as a hidden offscreen document (pinned background tab only as a fallback) and recognizes a
+  `MediaStreamTrack` built from those packets with `SpeechRecognition.start(track)`, continuous with interim results.
+  **It must never listen to the microphone:** on Chrome older than 135, which ignores the track, it refuses to start.
+* Use the on-device model (`processLocally`) when it is installed for the language and the popup allows it, else
+  the online service. The popup shows the engine state and lets the user download the model (a user click is required).
+* Restart within about 0.1 s when Chrome ends a session (back off only after errors) and keep words that were not
+  final yet. Speech results carry the session id and are dropped by the app unless they match.
+* Interim text is the live preview (when Live preview is on), final text becomes captions. Clean it lightly: spacing,
+  repeats, capitals, and a full stop per final result while the recognizer gives no punctuation.
+
+**Puter transcription pipeline**
 * Targets: 95%+ accuracy on clear speech, and about 2–3 s from speech to text.
 * Smart chunking cuts at natural pauses and never in the middle of a word. Chunks are 1.5 s minimum and 4 s maximum.
   Near the maximum, cut at a word gap. With no gap at all, cut at the quietest point in the last 0.5 s and repeat
@@ -73,8 +93,8 @@ pipeline, UI, or extension.
   set the language explicitly. Apply light normalization. Skip silent chunks.
 * Live preview (on by default): from 0.3 s of speech on, transcribe the not-yet-final audio about once a second
   (one request at a time) and show it as grey provisional text. Final in-order results replace it, and the covered
-  part of the preview is trimmed. Previews are **never written to the transcript**. On Start, warm up Puter with a
-  free test-mode request.
+  part of the preview is trimmed. Previews are **never written to the transcript** (with either engine). On Start,
+  warm up Puter with a free test-mode request.
 * Run final-chunk requests in parallel with sequence numbers, and always output in order. Never run more than **3**
   Puter requests at once in total, previews included, because that's Puter's free-plan limit. Final chunks wait for a
   slot, and previews only start when a slot is free. Retry a `429` after a short wait. Retry a failed request once,
@@ -102,8 +122,8 @@ pipeline, UI, or extension.
   This keeps React, Vue, Slate, Lexical, ProseMirror and Quill working.
 * **Never press Enter and never submit forms.**
 * The bridge binds to **127.0.0.1 only**. It rejects any `Origin` other than `chrome-extension://`, requires the pairing
-  token (constant-time comparison), auto-reconnects, and shows connection status in the app and in the extension
-  icon.
+  token (constant-time comparison) from every client (typer and speech page), auto-reconnects, and shows connection
+  status in the app and in the extension icon.
 
 **Window, tray and focus**
 * The overlay is frameless, transparent, adjustable in opacity, always on top, resizable from all edges, and
@@ -121,7 +141,7 @@ pipeline, UI, or extension.
 
 **Performance**
 * Low memory (target about 100 MB idle) and low CPU. Start/Stop reacts in under 100 ms. The debug view shows the
-  average speech-to-text delay.
+  average speech-to-text delay (Chrome engine: from the start of speech to its first words on screen).
 
 ## 5. Code quality rules
 

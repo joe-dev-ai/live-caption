@@ -1,0 +1,18 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <title>Live Caption speech engine</title>
+    <style>
+      body { font: 14px "Segoe UI", Roboto, system-ui, sans-serif; margin: 24px; color: #1f1f1f; }
+      @media (prefers-color-scheme: dark) { body { background: #1f1f1f; color: #e3e3e3; } }
+      #status { font-weight: 600; }
+    </style>
+  </head>
+  <body>
+    <h1>Live Caption speech engine</h1>
+    <p>This page turns the audio captured by Live Caption Overlay into text with Chrome's built-in speech recognition. It opens and closes together with captioning.</p>
+    <p id="status">Starting…</p>
+    <script src="listener.js" type="module"></script>
+  </body>
+</html>

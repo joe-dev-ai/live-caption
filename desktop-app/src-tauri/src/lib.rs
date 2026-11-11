@@ -22,7 +22,7 @@ mod tray;
 use audio::{CaptureHandle, CaptureStatus, Source};
 use bridge::{Bridge, BridgeStatus};
 use serde::Serialize;
-use settings::{CaptureMode, Settings};
+use settings::{CaptureMode, Engine, Settings};
 use std::path::PathBuf;
 use std::sync::atomic::{AtomicU32, Ordering};
 use std::sync::{Arc, Mutex};
@@ -111,7 +111,15 @@ fn start_capture(app: AppHandle, state: State<AppState>, on_audio: Channel<Invok
             }
         }
     };
-    let sink = Box::new(move |bytes: Vec<u8>| on_audio.send(InvokeResponseBody::Raw(bytes)).is_ok());
+    // With the Chrome engine the audio also goes to the extension's speech
+    // page; the web view keeps receiving it either way.
+    let bridge = (state.settings.lock().unwrap().engine == Engine::Chrome).then(|| state.bridge.clone());
+    let sink = Box::new(move |bytes: Vec<u8>| {
+        if let Some(bridge) = &bridge {
+            bridge.send_audio(&bytes);
+        }
+        on_audio.send(InvokeResponseBody::Raw(bytes)).is_ok()
+    });
     let last = state.capture_status.clone();
     *last.lock().unwrap() = None;
     let app_status = app.clone();
@@ -135,9 +143,13 @@ fn stop_capture(state: State<AppState>) {
 }
 
 /// Called by the overlay whenever captioning starts/stops or typing is toggled.
+/// `typing`: type into Chrome; `listen`: run Chrome's speech recognition on the
+/// streamed audio (Chrome engine); `lang`: its BCP 47 language.
 #[tauri::command]
-fn set_captioning(state: State<AppState>, active: bool, typing: bool, session: u64) {
-    state.bridge.set_state(active && typing, session);
+fn set_captioning(state: State<AppState>, active: bool, typing: bool, listen: bool, lang: String, session: u64) {
+    state
+        .bridge
+        .set_state(active && typing, active && listen, session, &lang);
     if let Some(t) = state.tray.lock().unwrap().as_ref() {
         t.set_active(active);
     }

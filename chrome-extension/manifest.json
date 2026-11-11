@@ -2,9 +2,9 @@
   "manifest_version": 3,
   "name": "Live Caption Typer",
   "version": "1.0.0",
-  "description": "Types live captions from the Live Caption Overlay desktop app into the focused text field of the active tab.",
+  "description": "Types live captions from the Live Caption Overlay desktop app into the focused text field of the active tab, and can recognize the speech with Chrome's built-in engine.",
   "minimum_chrome_version": "116",
-  "permissions": ["storage", "scripting", "alarms"],
+  "permissions": ["storage", "scripting", "alarms", "offscreen"],
   "host_permissions": ["<all_urls>"],
   "background": {
     "service_worker": "background.js",

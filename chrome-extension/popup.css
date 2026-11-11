@@ -123,3 +123,46 @@ button:hover {
   color: var(--muted);
   font-size: 12px;
 }
+.engine {
+  margin-top: 14px;
+  padding-top: 10px;
+  border-top: 1px solid var(--outline);
+  display: grid;
+  gap: 8px;
+}
+h2 {
+  font-size: 13px;
+  font-weight: 600;
+  margin: 0;
+}
+.engine .detail {
+  margin: 0 2px;
+}
+select {
+  height: 34px;
+  padding: 0 8px;
+  border-radius: 8px;
+  border: 1px solid var(--outline);
+  background: var(--surface);
+  color: var(--text);
+  font: 13px "Segoe UI", Roboto, system-ui, sans-serif;
+}
+.model {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  color: var(--muted);
+  font-size: 12px;
+}
+.model span {
+  flex: 1;
+}
+button.tonal {
+  background: var(--surface-2);
+  color: var(--primary);
+  flex: none;
+}
+button:disabled {
+  opacity: 0.6;
+  cursor: default;
+}

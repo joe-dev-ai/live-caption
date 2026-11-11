@@ -14,11 +14,19 @@
  *  - text is only inserted while the app says typing is active for the same
  *    session, checked again right before each insertion, so nothing is typed
  *    after Stop.
+ *
+ * With the app's "Chrome" speech engine it also opens the speech page
+ * (listener.html) while captioning runs and closes it on Stop. The page runs
+ * in a hidden offscreen document; if Chrome refuses speech recognition there,
+ * it moves to a pinned background tab instead.
  */
 
 const DEFAULT_PORT = 47821;
 const PING_MS = 20000;
 const MAX_RETRY_MS = 5000;
+const LISTENER_URL = chrome.runtime.getURL("listener.html");
+/** Recognition errors after which the speech page moves from the offscreen document to a tab. */
+const OFFSCREEN_REFUSALS = ["not-allowed", "service-not-allowed", "audio-capture"];
 
 /** @typedef {"unpaired"|"connecting"|"connected"|"disconnected"|"auth_failed"} ConnState */
 
@@ -28,6 +36,11 @@ let ws = null;
 let connState = "disconnected";
 let active = false;
 let session = 0;
+/** Whether the app wants the speech page (Chrome engine, captioning on). */
+let listen = false;
+let lang = "en-US";
+/** @type {{state: string, mode: string, detail: string} | null} */
+let listener = null;
 let retryMs = 1000;
 /** @type {ReturnType<typeof setTimeout> | undefined} */
 let retryTimer;
@@ -55,7 +68,7 @@ async function getConfig() {
 
 async function publish() {
   const { port } = await getConfig();
-  await chrome.storage.session.set({ status: { state: connState, active, port, lastResult } });
+  await chrome.storage.session.set({ status: { state: connState, active, port, lastResult, listen, lang, listener } });
   const connected = connState === "connected";
   const variant = connected ? "connected" : "disconnected";
   await chrome.action.setIcon({
@@ -84,7 +97,21 @@ async function publish() {
 /** @param {ConnState} s */
 function setState(s) {
   connState = s;
-  if (s !== "connected") active = false;
+  if (s !== "connected") {
+    active = false;
+    listen = false;
+    syncListener();
+  }
+  void publish();
+}
+
+/** Apply a welcome/state message from the app. @param {any} msg */
+function applyAppState(msg) {
+  active = !!msg.active;
+  session = Number(msg.session) || 0;
+  if (msg.lang) lang = String(msg.lang);
+  listen = !!msg.listen;
+  syncListener();
   void publish();
 }
 
@@ -149,13 +176,11 @@ function onMessage(sock, data) {
     case "welcome":
       retryMs = 1000;
       connState = "connected";
-      active = !!msg.active;
-      session = Number(msg.session) || 0;
       clearInterval(pingTimer);
       pingTimer = setInterval(() => {
         if (sock.readyState === WebSocket.OPEN) sock.send('{"type":"ping"}');
       }, PING_MS);
-      void publish();
+      applyAppState(msg);
       break;
     case "auth_error":
       connState = "auth_failed";
@@ -164,9 +189,7 @@ function onMessage(sock, data) {
       break;
     case "state":
       // Applied immediately, before any queued insertion runs.
-      active = !!msg.active;
-      session = Number(msg.session) || 0;
-      void publish();
+      applyAppState(msg);
       break;
     case "text": {
       if (!active || msg.session !== session) return;
@@ -255,6 +278,70 @@ async function insertIntoActiveTab(job) {
   }
 }
 
+// ------------------------------------------------------- speech page
+
+/** Opening and closing run one at a time, so a quick Stop/Start can't race. */
+let listenerOps = Promise.resolve();
+
+function syncListener() {
+  listenerOps = listenerOps.then(() => (listen ? openListener() : closeListener())).catch(() => {});
+}
+
+/** The speech page wherever it runs (offscreen document and/or tab). */
+function listenerContexts() {
+  return chrome.runtime.getContexts({
+    contextTypes: [chrome.runtime.ContextType.OFFSCREEN_DOCUMENT, chrome.runtime.ContextType.TAB],
+    documentUrls: [LISTENER_URL],
+  });
+}
+
+async function openListener() {
+  if ((await listenerContexts()).length) return;
+  listener = null;
+  const { listenerHost = "offscreen" } = await chrome.storage.local.get("listenerHost");
+  if (listenerHost === "offscreen") {
+    try {
+      await chrome.offscreen.createDocument({
+        url: "listener.html",
+        reasons: [chrome.offscreen.Reason.USER_MEDIA],
+        justification: "Recognizes speech in the audio streamed by the Live Caption Overlay desktop app.",
+      });
+      return;
+    } catch {
+      /* fall back to a tab below */
+    }
+  }
+  await chrome.tabs.create({ url: "listener.html", pinned: true, active: false });
+}
+
+async function closeListener() {
+  for (const ctx of await listenerContexts()) {
+    if (ctx.contextType === chrome.runtime.ContextType.OFFSCREEN_DOCUMENT) await chrome.offscreen.closeDocument();
+    else if (ctx.tabId !== undefined && ctx.tabId >= 0) await chrome.tabs.remove(ctx.tabId).catch(() => {});
+  }
+}
+
+/**
+ * Status from the speech page. If Chrome refuses recognition in the hidden
+ * offscreen document, remember that and run the page in a tab from now on.
+ * @param {any} msg
+ * @param {chrome.runtime.MessageSender} sender
+ */
+function onListenerStatus(msg, sender) {
+  listener = { state: String(msg.state), mode: String(msg.mode), detail: String(msg.detail || "") };
+  void publish();
+  const offscreen = sender.tab === undefined;
+  if (offscreen && msg.state === "error" && OFFSCREEN_REFUSALS.includes(msg.detail)) {
+    listenerOps = listenerOps
+      .then(async () => {
+        await chrome.storage.local.set({ listenerHost: "tab" });
+        await closeListener();
+        if (listen) await openListener();
+      })
+      .catch(() => {});
+  }
+}
+
 // ------------------------------------------------------------- events
 
 chrome.storage.onChanged.addListener((changes, area) => {
@@ -266,7 +353,18 @@ chrome.storage.onChanged.addListener((changes, area) => {
   }
 });
 
-chrome.runtime.onMessage.addListener((msg, _sender, sendResponse) => {
+chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
+  if (sender.id !== chrome.runtime.id) return false;
+  if (msg?.type === "listener-config") {
+    void Promise.all([getConfig(), chrome.storage.local.get("speechMode")]).then(([{ port, token }, { speechMode }]) =>
+      sendResponse({ port, token, mode: speechMode === "online" ? "online" : "auto" }),
+    );
+    return true;
+  }
+  if (msg?.type === "listener-status") {
+    onListenerStatus(msg, sender);
+    return false;
+  }
   if (msg?.type === "reconnect") {
     retryMs = 1000;
     if (connState === "auth_failed") connState = "disconnected";

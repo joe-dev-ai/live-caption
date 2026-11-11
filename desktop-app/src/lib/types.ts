@@ -2,8 +2,11 @@
 
 export type CaptureMode = "jumpDesktop" | "system";
 export type Priority = "accuracy" | "balanced" | "speed";
+/** "chrome": Chrome's built-in speech recognition via the extension; "puter": Puter.js. */
+export type Engine = "chrome" | "puter";
 
 export interface Settings {
+  engine: Engine;
   captureMode: CaptureMode;
   jumpProcessNames: string;
   language: string;
@@ -37,7 +40,10 @@ export interface CaptureStatus {
 export interface BridgeStatus {
   listening: boolean;
   port: number;
+  /** Connected extension instances that type text. */
   clients: number;
+  /** Connected speech pages (Chrome engine). */
+  listeners: number;
   error?: string | null;
 }
 
@@ -75,6 +81,21 @@ export interface BridgeAck {
   seq: number;
   result: AckResult;
   detail?: string;
+}
+
+/** What the extension's speech page reports (Chrome engine). */
+export interface ListenerStatus {
+  state: "starting" | "listening" | "error" | "stopped" | "disconnected";
+  /** "on-device" or "online". */
+  mode: string;
+  detail: string;
+}
+
+/** Recognized speech from the extension's speech page. */
+export interface SpeechEvent {
+  session: number;
+  final: string;
+  interim: string;
 }
 
 /** Puter account state shared between the overlay and settings windows. */

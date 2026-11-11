@@ -7,11 +7,14 @@ Live captions for the audio of a remote computer that you reach with **Jump Desk
 Remote computer ──Jump Desktop──▶ Local Windows PC
                                   ├─ Live Caption Overlay (Tauri desktop app)
                                   │    1. WASAPI process loopback: captures only Jump Desktop's audio
-                                  │    2. 16 kHz mono PCM → voice-activity chunking (cuts at pauses)
-                                  │    3. Puter.js speech-to-text (gpt-transcribe), 3 requests in parallel
+                                  │    2. 16 kHz mono PCM, in 100 ms packets
+                                  │    3. Speech-to-text, one of two engines:
+                                  │       • Chrome (default): audio → bridge → Chrome's built-in speech recognition
+                                  │       • Puter: voice-activity chunking → Puter.js (gpt-transcribe)
                                   │    4. Captions in a transparent, always-on-top overlay
                                   │    5. WebSocket bridge on 127.0.0.1 ──┐
-                                  └─ Chrome + "Live Caption Typer" ◀──────┘ types into the focused field
+                                  └─ Chrome + "Live Caption Typer" ◀──────┘ recognizes speech (Chrome engine)
+                                                                            and types into the focused field
 ```
 
 | Folder | What it is |
@@ -32,8 +35,8 @@ per-process loopback API, which these Windows versions introduced.
 | Rust | stable, MSVC toolchain | Install with <https://rustup.rs>, then `rustup default stable-msvc` |
 | Microsoft C++ Build Tools | 2022 | In the Visual Studio Installer, select **"Desktop development with C++"** |
 | Microsoft Edge WebView2 Runtime | any | Already installed on Windows 11 and up-to-date Windows 10 |
-| Google Chrome | 116 or newer | For the typing extension |
-| Puter account | free | Speech-to-text runs on Puter's "user-pays" model: you sign in with your own Puter account and usage is billed to it |
+| Google Chrome | 135 or newer | For the extension. Typing alone works from 116; the Chrome speech engine needs 135+, on-device recognition 139+ |
+| Puter account | free | Only for the optional Puter engine, which runs on Puter's "user-pays" model: you sign in with your own Puter account. A free account is never charged, but its monthly allowance is small |
 
 The full list of Tauri prerequisites is at <https://v2.tauri.app/start/prerequisites/>.
 
@@ -85,6 +88,22 @@ This builds the installers:
 The extension stays paired across restarts and reconnects on its own (within about 1–5 s) when the app restarts.
 If you click **New token** in Settings, you need to pair again.
 
+### Chrome speech engine (the default)
+
+With **Settings → Transcription → Speech engine: Chrome**, the extension also does the speech recognition, for free
+and with no account or monthly limit. While captioning runs, the app streams the captured audio to the extension,
+which opens a hidden page that feeds it to Chrome's built-in speech recognition and sends the text back. Keep
+Chrome running with the extension paired. Chrome's own microphone is never used.
+
+The extension popup has a **Chrome speech engine** section:
+
+* The engine status (Idle, Listening, or an error) and whether it runs **on-device** or **online**.
+* **Recognition**: *On-device when installed, else online* (default) or *Always online (Google)*. It applies the
+  next time captioning starts.
+* The on-device model for the caption language. If it says *not installed*, click **Download** once. On-device
+  recognition works offline, keeps the audio on your PC, and has no limits. Until the model is installed, the
+  online service is used, which sends the audio to Google and needs internet.
+
 Extension icon states:
 
 | Icon / badge | Meaning |
@@ -102,16 +121,19 @@ Extension icon states:
 
 1. Start Jump Desktop and connect to the remote computer.
 2. Start Live Caption Overlay. A transparent caption bar appears and a CC icon appears in the system tray.
-3. The overlay asks you to **Sign in to Puter**. Click **Sign in**. A Puter window opens; sign in or create a free
-   account. You only do this once, because the session is remembered.
+3. Pair the Chrome extension (section 3). With the default **Chrome** speech engine, nothing else is needed. In the
+   extension popup, download the on-device model once if it offers one.
+4. Only if you switch to the **Puter** engine: the overlay asks you to **Sign in to Puter**. Click **Sign in**. A
+   Puter window opens; sign in or create a free account. You only do this once, because the session is remembered.
    *Tip: use your Puter username or email and password. Google sign-in is sometimes refused inside embedded app
    windows.*
 
 ### Captioning and typing
 
 * Click **▶ Start** or press **Ctrl+Alt+Q** (from any app, including Chrome) to start.
-* As soon as someone speaks, **live preview** text appears in grey and grows while they talk. Within about 2–3 s it
-  is replaced by the final, more accurate text in white. The newest line is at the bottom.
+* As soon as someone speaks, **live preview** text appears in grey and grows while they talk. It is replaced by the
+  final text in white: with the Chrome engine when the speaker pauses, with Puter within about 2–3 s. The newest
+  line is at the bottom.
 * While captioning is running and **Type into Chrome** is on, captions are typed at the caret of the focused field
   in the active Chrome tab, with spaces added automatically. Click into a chat box or document in Chrome and the text
   appears there. With **Type the live preview immediately** (on by default), words are typed about as fast as the
@@ -139,7 +161,8 @@ Extension icon states:
 | — | Minimize to tray (closing the window also hides it to the tray) |
 
 Status indicator: **Idle**, **Listening**, **Transcribing**, **Typing to Chrome**, **No text field focused**,
-**Jump Desktop not detected**, or **Error** with details.
+**Jump Desktop not detected**, **Chrome extension not connected**, **Starting Chrome speech…**, or **Error** with
+details.
 
 **Tray menu:** Show / Hide, Start / Stop captioning, Settings…, Quit. The tray icon turns red while captioning.
 Left-click the tray icon to show or hide the overlay.
@@ -163,21 +186,27 @@ Changes save automatically and apply right away. They are stored in
 | --- | --- | --- |
 | Audio capture | Capture mode: **Jump Desktop only** (process loopback) / **All system audio** (fallback) | Jump Desktop only |
 | | Jump Desktop process names (Advanced) | `JumpDesktop.exe, JumpClient.exe, JumpWinClient.exe` |
-| Transcription | Language (sent explicitly; no auto-detection) | English |
-| | Priority: **Accuracy** (2–5 s chunks) / **Balanced** (1.5–4 s) / **Speed** (1–3 s) | Balanced |
-| | Model: **Auto** (Puter's default speech-to-text model, currently `gpt-transcribe`) or `gpt-transcribe`. If Puter refuses a chosen model, the default is used automatically. | Auto |
-| | Live preview: grey provisional text while speech is in progress (uses more Puter requests) | On |
-| | Use recent text as context (sends the last 1–2 sentences as the prompt) | On |
-| | Parallel requests for final text (1–3; Puter's free plan allows 3 at once in total, live previews included) | 3 |
+| Transcription | Speech engine: **Chrome** (free, unlimited, through the extension) / **Puter** | Chrome |
+| | Language (sent explicitly; no auto-detection) | English |
+| | Live preview: grey provisional text while speech is in progress (with Puter it uses more requests) | On |
+| | *Puter only:* Priority: **Accuracy** (2–5 s chunks) / **Balanced** (1.5–4 s) / **Speed** (1–3 s) | Balanced |
+| | *Puter only:* Model: **Auto** (Puter's default speech-to-text model, currently `gpt-transcribe`) or `gpt-transcribe`. If Puter refuses a chosen model, the default is used automatically. | Auto |
+| | *Puter only:* Use recent text as context (sends the last 1–2 sentences as the prompt) | On |
+| | *Puter only:* Parallel requests for final text (1–3; Puter's free plan allows 3 at once in total, live previews included) | 3 |
 | Type into Chrome | On/off, **Type the live preview immediately** (fastest; corrected in place), pairing token (Copy / New token), local port | On, on, random token, 47821 |
 | Hotkeys | Start/Stop, Show/Hide, Typing on/off (click a field, press the keys; Backspace clears it) | see above |
 | Appearance | Font size, background opacity, debug info. The caption area keeps the whole session: scroll up to reread, and click **Latest** to jump back | 26 px, 60 %, off |
 | Transcript | Save a `.txt` file with timestamps (a new file each time you press Start); folder | Off, `Documents\Live Captions` |
-| Puter account | Who is signed in, how much of this month's free allowance is used (bar, dollars left, about how many hours of captioning that covers at the current settings), and Sign out | — |
+| Puter account (Puter engine only) | Who is signed in, how much of this month's free allowance is used (bar, dollars left, about how many hours of captioning that covers at the current settings), and Sign out | — |
 
-**Debug info** adds a line to the overlay showing the model, average chunk length, API time, end-of-chunk→text
-delay (average and p90), the average speech→text delay, requests in flight, and how many chunks were skipped
-(silent), filtered (hallucinations), or failed. Use it to tune the Priority setting.
+Options that only apply to Puter are hidden while the Chrome engine is selected. Recognition mode and the on-device
+model of the Chrome engine are set in the extension popup.
+
+**Debug info** adds a line to the overlay. With the Chrome engine it shows on-device/online, the average delay from
+the start of speech to its first words on screen, the average time until those words are final, and the number of
+final results. With Puter it shows the model, average chunk length, API time, end-of-chunk→text delay (average and
+p90), the average speech→text delay, requests in flight, and how many chunks were skipped (silent), filtered
+(hallucinations), or failed. Use it to tune the Priority setting.
 
 ---
 
@@ -194,7 +223,26 @@ delay (average and p90), the average speech→text delay, requests in flight, an
   16-bit**. It is streamed to the web view in 100 ms packets over a Tauri channel. During silence, when WASAPI
   delivers no packets, the app pads with silent audio so speech chunks still close on time.
 
-**Transcription pipeline (TypeScript, `src/pipeline/`)**
+**Chrome speech engine (`chrome-extension/listener.js`, `src/pipeline/chrome-speech.ts`)**
+
+* While captioning with the Chrome engine, the bridge also sends the 100 ms PCM packets as binary WebSocket frames
+  to the extension's speech page, and only while listening is on.
+* The service worker opens that page (`listener.html`) as a hidden **offscreen document** on Start and closes it on
+  Stop. If Chrome ever refused recognition there, it would move the page to a pinned background tab instead.
+* The page turns the packets into a live audio track (`MediaStreamTrackGenerator`, or an `AudioContext` as a
+  fallback) and runs `SpeechRecognition` on that track (`start(track)`, Chrome 135+), continuous with interim
+  results. Recognizing a track needs no microphone permission. On older Chrome versions, which would ignore the
+  track and use the microphone, it refuses to start instead.
+* It uses the on-device model (`processLocally`) when `SpeechRecognition.available()` says it is installed for the
+  language and the popup allows it, and Chrome's online service otherwise. Chrome ends recognition sessions from
+  time to time: the page restarts within 0.1 s (backing off only after errors), and words that were not final yet
+  are kept.
+* The app shows the interim text as the live preview and the final text as captions (`chrome-speech.ts`). Chrome's
+  online recognizer returns no punctuation, so until punctuation shows up, each final result (which ends at a pause)
+  becomes a sentence with a capital and a full stop. The delay is measured by running the same audio through the
+  VAD: from the start of speech to its first words on screen.
+
+**Puter transcription pipeline (TypeScript, `src/pipeline/`)**
 
 * **VAD and smart chunking** (`vad.ts`, `chunker.ts`): an energy VAD with an adaptive noise floor, applied to
   20 ms frames. A chunk starts at speech onset (with 0.3 s of pre-roll). After the minimum length (≥ 1.5 s), it
@@ -237,7 +285,8 @@ delay (average and p90), the average speech→text delay, requests in flight, an
 * The app runs a WebSocket server on **127.0.0.1 only** (`bridge.rs`). Handshakes with any `Origin` other than
   `chrome-extension://…` are rejected, so web pages can't connect. The first message must carry the pairing token
   (compared in constant time, with a delay after a wrong token). Text is forwarded only while typing is active and
-  only for the current session id, so nothing from before a Stop can be typed after it.
+  only for the current session id, so nothing from before a Stop can be typed after it. Clients say whether they
+  type text (the service worker) or recognize speech (the speech page, which receives the audio).
 * The extension's service worker (`background.js`) keeps the connection alive. It pings every 20 s, reconnects
   with back-off, and a 30 s alarm wakes it if Chrome stopped it. For each chunk it finds the frame that holds the
   caret (checking iframes, cross-origin frames, and open shadow DOM too) and calls `content.js`. It applies
@@ -272,40 +321,49 @@ overlay shows a line like this:
 > Accuracy test: 96.8 % accuracy (WER 3.2 % over 312 words: 6 substituted, 2 missed, 2 extra).
 > avg speech→text 2.31 s, end→text 1.12 s (p90 1.60 s), API 0.98 s.
 
+The test works with both engines. With the Chrome engine, the delay part reads like
+`avg speech→first words 0.45 s, words→final 1.80 s`.
+
 WER is case- and punctuation-insensitive. Numbers written differently ("12" vs "twelve") count as errors, so
 transcripts that spell numbers out compare more fairly. The typing path works during the test too, so you can watch
 the text arrive in Chrome.
 
-**Offline test mode.** Set `$env:LCO_FAKE_STT = "1"` to replace Puter with a placeholder transcriber that outputs
+**Offline test mode (Puter engine).** Set `$env:LCO_FAKE_STT = "1"` to replace Puter with a placeholder transcriber that outputs
 `Test chunk N (x.x s).` for each chunk. Combined with `LCO_TEST_AUDIO`, this tests capture, chunking, captions, and
 Chrome typing without a Puter account or credits.
 
 ## 8. Developer tests
 
 ```bash
-# Front end: VAD/chunking, post-processing, ordered scheduler, WAV, WER, pipeline, Puter wrapper, caption view, typing planner, request limiter, allowance (62 tests)
+# Front end: VAD/chunking, post-processing, ordered scheduler, WAV, WER, pipeline, Puter wrapper, caption view, typing planner, request limiter, allowance, Chrome speech (70 tests)
 cd desktop-app
 npm test
 npm run typecheck
 
-# Back end: resampler, PCM packetising, settings, WebSocket bridge integration tests (16 tests)
+# Back end: resampler, PCM packetising, settings, WebSocket bridge integration tests (18 tests)
 cd src-tauri
 cargo test
 
 # Run only the WebSocket bridge (no UI/audio) to try the extension by hand:
 cargo run --example bridge_server -- 47821 TEST-TOKE-N123-4567
 #   then type:  start 1   |   text 1 Hello world.   |   stop
+#   Chrome speech engine:  listen 1 en-US   |   audio C:\tests\speech16k.wav   (16 kHz mono 16-bit WAV)   |   stop
 ```
 
 ---
 
 ## 9. Known limitations
 
-* **Delay.** Puter's free speech-to-text takes whole audio files, not a live stream (Puter's streaming API needs a
+* **Chrome engine needs Chrome.** Chrome must be running with the extension paired, or the overlay shows "Chrome
+  extension not connected". Online recognition sends the audio to Google and needs internet; on-device recognition
+  needs Chrome 139+ and a model for the language, which Chrome offers for common languages only. When Chrome ends a
+  recognition session, the restart takes about 0.1 s, so a syllable can occasionally be missed. The online
+  recognizer doesn't punctuate, so the app ends a sentence at each pause; that is sometimes mid-sentence.
+* **Puter delay.** Puter's free speech-to-text takes whole audio files, not a live stream (Puter's streaming API needs a
   paid plan). Live preview shows the first words about 0.3 s plus Puter's response time after speech starts, and the final
   text follows within about 2–3 s. Turn on **Show debug info** to see Puter's response time ("API") on your
   connection. Live preview sends extra requests; turn it off in Settings to use fewer.
-* **Puter sign-in and usage.** You need a Puter account. A free account is **never charged**: it has a monthly
+* **Puter sign-in and usage.** The Puter engine needs a Puter account. A free account is **never charged**: it has a monthly
   allowance, and when that runs out captions pause (with a message) until it resets next month. Settings shows how
   much is used, and the overlay warns once when less than 10% is left. Live preview sends about 3–4× more audio, so
   turning it off makes the allowance last longer. A free account also allows at most 3 Puter requests at once,
@@ -344,11 +402,16 @@ cargo run --example bridge_server -- 47821 TEST-TOKE-N123-4567
 | Chrome chip says "Chrome offline" | Make sure the extension is installed and paired. Click its icon, then **Reconnect**. If you changed the port, enter the same port in the popup. |
 | "Cannot listen on 127.0.0.1:47821" | Another program uses the port. Change Settings → Type into Chrome → Local port, and enter the same port in the popup. |
 | "No text field focused" | Click into a text box in the active Chrome tab. Password fields are never typed into. |
+| "Chrome extension not connected" (Chrome engine) | Start Chrome, and make sure the extension is installed (Load unpacked again after updating the folder) and paired. |
+| "Chrome speech: no connection" | The online service can't be reached. Check the internet connection, or download the on-device model in the extension popup. |
+| "Chrome 135 or later is needed" | Update Chrome (⋮ → Help → About Google Chrome), or switch Settings → Speech engine to Puter. |
+| Chrome engine runs but no words appear | Open the extension popup: the speech engine line shows its state. Check that the caption language matches the speaker. |
 | Hotkey doesn't work, or Settings says it "is already used by another program" | Another program owns that combination. Pick a different one in Settings → Global hotkeys (click the field, press the keys). Use Ctrl/Alt/Shift/Win plus a key; plain keys such as Tab can't be global hotkeys. On keyboards where AltGr = Ctrl+Alt (e.g. German), avoid Ctrl+Alt combinations that type characters, such as Ctrl+Alt+Q (@). |
 
 ## Credits
 
 * Icons: [Material Symbols](https://fonts.google.com/icons) (Apache License 2.0), inlined as SVG.
-* Speech-to-text: [Puter.js](https://developer.puter.com/) `puter.ai.speech2txt()`.
+* Speech-to-text: Chrome's built-in [Web Speech API](https://developer.mozilla.org/docs/Web/API/SpeechRecognition)
+  (default), or [Puter.js](https://developer.puter.com/) `puter.ai.speech2txt()`.
 * Built with [Tauri 2](https://v2.tauri.app/), [wasapi-rs](https://github.com/HEnquist/wasapi-rs), and
   [tokio-tungstenite](https://github.com/snapview/tokio-tungstenite).

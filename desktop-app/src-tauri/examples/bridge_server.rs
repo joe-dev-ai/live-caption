@@ -4,7 +4,8 @@
 //!   cargo run --example bridge_server -- 47821 TEST-TOKE-N123-4567
 //!
 //! Commands:  start <session> | stop | text <seq> <words…>
-//!            | typing <seq> <final words>|<provisional words> | quit
+//!            | typing <seq> <final words>|<provisional words>
+//!            | listen <session> <lang> | audio <16 kHz mono 16-bit wav> | quit
 
 use live_caption_overlay_lib::bridge::Bridge;
 use std::io::BufRead;
@@ -25,11 +26,11 @@ fn main() {
         match parts.next() {
             Some("start") => {
                 session = parts.next().and_then(|s| s.parse().ok()).unwrap_or(1);
-                bridge.set_state(true, session);
+                bridge.set_state(true, false, session, "en-US");
                 println!("{}", serde_json::json!({ "event": "started", "session": session }));
             }
             Some("stop") => {
-                bridge.set_state(false, session);
+                bridge.set_state(false, false, session, "en-US");
                 println!("{}", serde_json::json!({ "event": "stopped" }));
             }
             Some("text") => {
@@ -43,6 +44,26 @@ fn main() {
                 let (text, provisional) = parts.next().unwrap_or("").split_once('|').unwrap_or(("", ""));
                 let n = bridge.send_text(session, seq, text, Some(provisional));
                 println!("{}", serde_json::json!({ "event": "sent", "seq": seq, "clients": n }));
+            }
+            Some("listen") => {
+                session = parts.next().and_then(|s| s.parse().ok()).unwrap_or(1);
+                let lang = parts.next().unwrap_or("en-US").to_string();
+                bridge.set_state(true, true, session, &lang);
+                println!("{}", serde_json::json!({ "event": "listening", "session": session }));
+            }
+            Some("audio") => {
+                // Stream a WAV's samples in real time, as the capture would.
+                let path = parts.next().unwrap_or("").to_string();
+                let bridge = bridge.clone();
+                std::thread::spawn(move || {
+                    let Ok(bytes) = std::fs::read(&path) else { return };
+                    let pcm = &bytes[44.min(bytes.len())..];
+                    for packet in pcm.chunks(3200) {
+                        bridge.send_audio(packet);
+                        std::thread::sleep(std::time::Duration::from_millis(100));
+                    }
+                    println!("{}", serde_json::json!({ "event": "audio-done" }));
+                });
             }
             Some("quit") => break,
             _ => {}

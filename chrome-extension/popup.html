@@ -30,6 +30,21 @@
         <button type="button" class="text" id="reconnect">Reconnect</button>
       </div>
     </form>
+    <section class="engine" id="engine">
+      <h2>Chrome speech engine</h2>
+      <p class="detail" id="engine-status"></p>
+      <label>
+        <span>Recognition</span>
+        <select id="speech-mode">
+          <option value="auto">On-device when installed, else online</option>
+          <option value="online">Always online (Google)</option>
+        </select>
+      </label>
+      <div class="model">
+        <span id="model-text"></span>
+        <button type="button" class="tonal" id="install" hidden>Download</button>
+      </div>
+    </section>
     <p class="help">
       Find the token in the desktop app under <b>Settings → Type into Chrome</b>. While captioning is running, each
       caption is typed into the focused text field of the active tab. Enter is never pressed and password fields are

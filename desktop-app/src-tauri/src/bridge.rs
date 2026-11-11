@@ -7,11 +7,16 @@
 //!   token, within 5 s, or the connection is closed.
 //! * Text is only forwarded while typing is active and only for the current
 //!   session id, so nothing produced before a Stop can be typed after it.
+//! * Two client roles: the extension's service worker types text ("typer");
+//!   its speech page runs Chrome's speech recognition ("listener") on the
+//!   captured audio, which is streamed to it only while listening is on.
 //!
-//! Protocol (JSON text frames):
-//!   ext -> app : hello{token,version} | ping | ack{session,seq,result,detail}
-//!   app -> ext : welcome{active,session} | auth_error{reason} | pong
-//!                | state{active,session} | text{session,seq,text,provisional?}
+//! Protocol (JSON text frames; audio as binary frames of 16 kHz mono i16 LE):
+//!   ext -> app : hello{token,version?,role?} | ping | ack{session,seq,result,detail}
+//!                | speech{session,final,interim} | listener-status{state,mode,detail}   (listener)
+//!   app -> ext : welcome{active,listen,session,lang} | auth_error{reason} | pong
+//!                | state{active,listen,session,lang} | text{session,seq,text,provisional?}
+//!                | <binary PCM>                                                       (listener)
 
 use crate::settings::normalize_token;
 use futures_util::{SinkExt, StreamExt};
@@ -31,7 +36,8 @@ const AUTH_TIMEOUT: Duration = Duration::from_secs(5);
 /// Clients ping every 20 s; drop them after this long without any message.
 const CLIENT_TIMEOUT: Duration = Duration::from_secs(65);
 
-/// Receives bridge events: ("bridge-status", BridgeStatus) and ("bridge-ack", ack).
+/// Receives bridge events: ("bridge-status", BridgeStatus), ("bridge-ack", ack),
+/// ("bridge-speech", speech) and ("bridge-listener", listener status).
 pub type EmitFn = Arc<dyn Fn(&'static str, Value) + Send + Sync>;
 
 #[derive(Serialize, Clone, Debug, Default)]
@@ -39,22 +45,47 @@ pub type EmitFn = Arc<dyn Fn(&'static str, Value) + Send + Sync>;
 pub struct BridgeStatus {
     pub listening: bool,
     pub port: u16,
+    /// Connected extensions (typing side).
     pub clients: usize,
+    /// Connected Chrome speech pages.
+    pub listeners: usize,
     pub error: Option<String>,
 }
 
-#[derive(Default, Clone, Copy)]
-struct TypingState {
-    active: bool,
+#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+enum Role {
+    Typer,
+    Listener,
+}
+
+struct Client {
+    tx: mpsc::UnboundedSender<Message>,
+    role: Role,
+}
+
+#[derive(Default, Clone)]
+struct State {
+    /// Text may be typed into Chrome.
+    typing: bool,
+    /// Audio is streamed to Chrome's speech recognition.
+    listen: bool,
     session: u64,
+    /// BCP 47 language for speech recognition, e.g. "en-US".
+    lang: String,
+}
+
+impl State {
+    fn message(&self, kind: &str) -> Value {
+        json!({ "type": kind, "active": self.typing, "listen": self.listen, "session": self.session, "lang": self.lang })
+    }
 }
 
 struct Inner {
     emit: EmitFn,
     token: RwLock<String>,
-    clients: Mutex<HashMap<u64, mpsc::UnboundedSender<Message>>>,
+    clients: Mutex<HashMap<u64, Client>>,
     next_id: AtomicU64,
-    typing: Mutex<TypingState>,
+    state: Mutex<State>,
     status: Mutex<BridgeStatus>,
     server: Mutex<Option<tauri::async_runtime::JoinHandle<()>>>,
 }
@@ -72,7 +103,7 @@ impl Bridge {
                 token: RwLock::new(String::new()),
                 clients: Mutex::default(),
                 next_id: AtomicU64::new(1),
-                typing: Mutex::default(),
+                state: Mutex::default(),
                 status: Mutex::default(),
                 server: Mutex::default(),
             }),
@@ -86,8 +117,8 @@ impl Bridge {
         if let Some(old) = self.inner.server.lock().unwrap().take() {
             old.abort();
         }
-        for (_, tx) in self.inner.clients.lock().unwrap().drain() {
-            let _ = tx.send(Message::Close(None));
+        for (_, client) in self.inner.clients.lock().unwrap().drain() {
+            let _ = client.tx.send(Message::Close(None));
         }
         {
             let mut st = self.inner.status.lock().unwrap();
@@ -95,6 +126,7 @@ impl Bridge {
                 listening: false,
                 port,
                 clients: 0,
+                listeners: 0,
                 error: None,
             };
         }
@@ -124,12 +156,22 @@ impl Bridge {
         self.inner.status.lock().unwrap().clone()
     }
 
-    /// Start/stop typing. `session` changes on every Start so stale text from
-    /// a previous session is ignored by both sides.
-    pub fn set_state(&self, active: bool, session: u64) {
-        *self.inner.typing.lock().unwrap() = TypingState { active, session };
-        self.inner
-            .broadcast(json!({ "type": "state", "active": active, "session": session }));
+    /// Update what the extension should do. `typing`: type text into Chrome;
+    /// `listen`: run Chrome's speech recognition on the streamed audio.
+    /// `session` changes on every Start so stale text from a previous session
+    /// is ignored by both sides.
+    pub fn set_state(&self, typing: bool, listen: bool, session: u64, lang: &str) {
+        let msg = {
+            let mut st = self.inner.state.lock().unwrap();
+            *st = State {
+                typing,
+                listen,
+                session,
+                lang: lang.to_string(),
+            };
+            st.message("state")
+        };
+        self.inner.broadcast(msg, None);
     }
 
     /// Forward text to type. `text` is newly finalized caption text;
@@ -138,15 +180,32 @@ impl Bridge {
     /// of clients it was sent to (0 when typing is inactive or the session is
     /// stale, so nothing can be typed after Stop).
     pub fn send_text(&self, session: u64, seq: u64, text: &str, provisional: Option<&str>) -> usize {
-        let st = *self.inner.typing.lock().unwrap();
-        if !st.active || st.session != session || (text.trim().is_empty() && provisional.is_none()) {
-            return 0;
+        {
+            let st = self.inner.state.lock().unwrap();
+            if !st.typing || st.session != session || (text.trim().is_empty() && provisional.is_none()) {
+                return 0;
+            }
         }
         let mut msg = json!({ "type": "text", "session": session, "seq": seq, "text": text });
         if let Some(p) = provisional {
             msg["provisional"] = json!(p);
         }
-        self.inner.broadcast(msg)
+        self.inner.broadcast(msg, Some(Role::Typer))
+    }
+
+    /// Stream one packet of captured audio (16 kHz mono i16 LE) to Chrome's
+    /// speech recognition. Only sent while listening is on; returns the
+    /// number of speech pages it reached.
+    pub fn send_audio(&self, pcm: &[u8]) -> usize {
+        if !self.inner.state.lock().unwrap().listen {
+            return 0;
+        }
+        let clients = self.inner.clients.lock().unwrap();
+        clients
+            .values()
+            .filter(|c| c.role == Role::Listener)
+            .filter(|c| c.tx.send(Message::binary(pcm.to_vec())).is_ok())
+            .count()
     }
 }
 
@@ -155,18 +214,22 @@ impl Inner {
         let snapshot = {
             let mut st = self.status.lock().unwrap();
             f(&mut st);
-            st.clients = self.clients.lock().unwrap().len();
+            let clients = self.clients.lock().unwrap();
+            st.clients = clients.values().filter(|c| c.role == Role::Typer).count();
+            st.listeners = clients.values().filter(|c| c.role == Role::Listener).count();
             st.clone()
         };
         (self.emit)("bridge-status", serde_json::to_value(snapshot).unwrap_or_default());
     }
 
-    fn broadcast(&self, msg: Value) -> usize {
+    /// Send to every client, or only to clients with `role`.
+    fn broadcast(&self, msg: Value, role: Option<Role>) -> usize {
         let text = msg.to_string();
         let clients = self.clients.lock().unwrap();
         clients
             .values()
-            .filter(|tx| tx.send(Message::text(text.clone())).is_ok())
+            .filter(|c| role.map_or(true, |r| c.role == r))
+            .filter(|c| c.tx.send(Message::text(text.clone())).is_ok())
             .count()
     }
 }
@@ -216,14 +279,19 @@ async fn handle_connection(inner: Arc<Inner>, stream: TcpStream) {
 
     // --- Authentication -------------------------------------------------
     let hello = tokio::time::timeout(AUTH_TIMEOUT, source.next()).await;
-    let authed = match hello {
+    let hello = match hello {
         Ok(Some(Ok(Message::Text(t)))) => serde_json::from_str::<Value>(t.as_str())
             .ok()
-            .filter(|v| v["type"] == "hello")
-            .and_then(|v| v["token"].as_str().map(normalize_token))
-            .map(|tok| tokens_match(&tok, &inner.token.read().unwrap()))
-            .unwrap_or(false),
-        _ => false,
+            .filter(|v| v["type"] == "hello"),
+        _ => None,
+    };
+    let authed = hello
+        .as_ref()
+        .and_then(|v| v["token"].as_str().map(normalize_token))
+        .is_some_and(|tok| tokens_match(&tok, &inner.token.read().unwrap()));
+    let role = match hello.as_ref().and_then(|v| v["role"].as_str()) {
+        Some("listener") => Role::Listener,
+        _ => Role::Typer,
     };
     if !authed {
         // Slow down guessing, then tell the extension why.
@@ -239,12 +307,14 @@ async fn handle_connection(inner: Arc<Inner>, stream: TcpStream) {
 
     let id = inner.next_id.fetch_add(1, Ordering::SeqCst);
     let (tx, mut rx) = mpsc::unbounded_channel::<Message>();
-    let st = *inner.typing.lock().unwrap();
-    let _ = tx.send(Message::text(
-        json!({ "type": "welcome", "active": st.active, "session": st.session, "version": env!("CARGO_PKG_VERSION") })
-            .to_string(),
-    ));
-    inner.clients.lock().unwrap().insert(id, tx.clone());
+    let mut welcome = inner.state.lock().unwrap().message("welcome");
+    welcome["version"] = json!(env!("CARGO_PKG_VERSION"));
+    let _ = tx.send(Message::text(welcome.to_string()));
+    inner
+        .clients
+        .lock()
+        .unwrap()
+        .insert(id, Client { tx: tx.clone(), role });
     inner.update_status(|_| {});
 
     // --- Main loop --------------------------------------------------------
@@ -259,6 +329,8 @@ async fn handle_connection(inner: Arc<Inner>, stream: TcpStream) {
                         match v["type"].as_str() {
                             Some("ping") => { let _ = tx.send(Message::text(r#"{"type":"pong"}"#)); }
                             Some("ack") => (inner.emit)("bridge-ack", v),
+                            Some("speech") if role == Role::Listener => (inner.emit)("bridge-speech", v),
+                            Some("listener-status") if role == Role::Listener => (inner.emit)("bridge-listener", v),
                             _ => {}
                         }
                     }

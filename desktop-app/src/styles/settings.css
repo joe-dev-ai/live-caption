@@ -237,3 +237,7 @@ details.advanced summary {
 .meter.low .meter-fill {
   background: var(--warn);
 }
+/* Options that only apply to the Puter engine. */
+body[data-engine="chrome"] .puter-only {
+  display: none;
+}

@@ -69,6 +69,17 @@ async fn hello(ws: &mut Ws, token: &str) -> Option<Value> {
     recv(ws).await
 }
 
+/// Next binary frame within `ms`, skipping text frames.
+async fn recv_binary(ws: &mut Ws, ms: u64) -> Option<Vec<u8>> {
+    loop {
+        match tokio::time::timeout(Duration::from_millis(ms), ws.next()).await {
+            Ok(Some(Ok(Message::Binary(b)))) => return Some(b.to_vec()),
+            Ok(Some(Ok(Message::Text(_)))) => continue,
+            _ => return None,
+        }
+    }
+}
+
 #[tokio::test(flavor = "multi_thread")]
 async fn rejects_web_page_origins() {
     let (_b, _) = start_bridge(48101);
@@ -97,10 +108,10 @@ async fn types_only_while_active_and_for_current_session() {
     assert!(eventually(|| b.status().clients == 1).await);
 
     assert_eq!(b.send_text(1, 0, "too early", None), 0, "nothing sent before Start");
-    b.set_state(true, 42);
+    b.set_state(true, false, 42, "en-US");
     assert_eq!(
         recv(&mut ws).await.unwrap(),
-        json!({ "type": "state", "active": true, "session": 42 })
+        json!({ "type": "state", "active": true, "listen": false, "session": 42, "lang": "en-US" })
     );
     assert_eq!(b.send_text(42, 1, "hello world", None), 1);
     assert_eq!(
@@ -119,7 +130,7 @@ async fn types_only_while_active_and_for_current_session() {
     assert_eq!(recv(&mut ws).await.unwrap()["provisional"], "");
     assert_eq!(b.send_text(42, 4, "  ", None), 0, "nothing to type");
 
-    b.set_state(false, 42);
+    b.set_state(false, false, 42, "en-US");
     assert_eq!(recv(&mut ws).await.unwrap()["active"], false);
     assert_eq!(
         b.send_text(42, 3, "after stop", Some("and more")),
@@ -175,4 +186,54 @@ async fn reports_port_in_use() {
     let st = b.status();
     assert!(!st.listening);
     assert!(st.error.unwrap_or_default().contains("48105"));
+}
+
+#[tokio::test(flavor = "multi_thread")]
+async fn speech_page_gets_audio_only_while_listening_and_returns_speech() {
+    let (b, events) = start_bridge(48107);
+    let mut typer = connect(48107, Some("chrome-extension://abc")).await.unwrap();
+    assert_eq!(hello(&mut typer, TOKEN).await.unwrap()["type"], "welcome");
+    let mut listener = connect(48107, Some("chrome-extension://abc")).await.unwrap();
+    listener
+        .send(Message::text(
+            json!({ "type": "hello", "token": TOKEN, "role": "listener" }).to_string(),
+        ))
+        .await
+        .unwrap();
+    assert_eq!(recv(&mut listener).await.unwrap()["type"], "welcome");
+    assert!(eventually(|| b.status().listeners == 1 && b.status().clients == 1).await);
+
+    assert_eq!(b.send_audio(&[1, 2, 3, 4]), 0, "not listening yet");
+    b.set_state(true, true, 7, "en-US");
+    let state = recv(&mut listener).await.unwrap();
+    assert_eq!(
+        (state["listen"].as_bool(), state["lang"].as_str()),
+        (Some(true), Some("en-US"))
+    );
+    assert_eq!(b.send_audio(&[1, 2, 3, 4]), 1, "only the speech page gets audio");
+    assert_eq!(recv_binary(&mut listener, 2000).await, Some(vec![1, 2, 3, 4]));
+    assert_eq!(recv_binary(&mut typer, 300).await, None);
+
+    // Recognized speech goes to the app; a typer cannot inject speech.
+    let speech = json!({ "type": "speech", "session": 7, "final": "hello world", "interim": "how" });
+    listener.send(Message::text(speech.to_string())).await.unwrap();
+    typer
+        .send(Message::text(
+            json!({ "type": "speech", "session": 7, "final": "fake" }).to_string(),
+        ))
+        .await
+        .unwrap();
+    assert!(
+        eventually(|| events
+            .lock()
+            .unwrap()
+            .iter()
+            .any(|(n, v)| n == "bridge-speech" && v["final"] == "hello world"))
+        .await
+    );
+    tokio::time::sleep(Duration::from_millis(200)).await;
+    assert!(!events.lock().unwrap().iter().any(|(_, v)| v["final"] == "fake"));
+
+    b.set_state(true, false, 7, "en-US");
+    assert_eq!(b.send_audio(&[5, 6]), 0, "stopped listening");
 }

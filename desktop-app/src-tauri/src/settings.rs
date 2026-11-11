@@ -18,6 +18,16 @@ pub enum CaptureMode {
 
 #[derive(Serialize, Deserialize, Clone, Copy, Debug, PartialEq, Eq)]
 #[serde(rename_all = "camelCase")]
+pub enum Engine {
+    /// Chrome's built-in speech recognition, run by the companion extension
+    /// on the streamed audio: free, no usage limit.
+    Chrome,
+    /// Puter.js speech-to-text on WAV chunks (monthly allowance).
+    Puter,
+}
+
+#[derive(Serialize, Deserialize, Clone, Copy, Debug, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
 pub enum Priority {
     Accuracy,
     Balanced,
@@ -28,6 +38,8 @@ pub enum Priority {
 #[serde(rename_all = "camelCase", default)]
 pub struct Settings {
     pub capture_mode: CaptureMode,
+    /// Speech-to-text engine.
+    pub engine: Engine,
     /// Comma separated executable names that identify Jump Desktop.
     pub jump_process_names: String,
     /// ISO-639-1 language code passed to the speech-to-text model.
@@ -73,6 +85,7 @@ impl Default for Settings {
     fn default() -> Self {
         Self {
             capture_mode: CaptureMode::JumpDesktop,
+            engine: Engine::Chrome,
             jump_process_names: DEFAULT_JUMP_NAMES.to_string(),
             language: "en".into(),
             priority: Priority::Balanced,
@@ -228,6 +241,15 @@ mod tests {
         }
         .sanitized();
         assert_eq!(custom.hotkey_toggle, "Ctrl+Shift+F9");
+    }
+
+    #[test]
+    fn chrome_engine_is_the_default_also_for_older_settings_files() {
+        assert_eq!(Settings::default().engine, Engine::Chrome);
+        let old: Settings = serde_json::from_str(r#"{ "language": "en", "maxParallel": 3 }"#).unwrap();
+        assert_eq!(old.engine, Engine::Chrome);
+        let puter: Settings = serde_json::from_str(r#"{ "engine": "puter" }"#).unwrap();
+        assert_eq!(puter.engine, Engine::Puter);
     }
 
     #[test]

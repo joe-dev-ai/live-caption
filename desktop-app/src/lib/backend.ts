@@ -12,8 +12,12 @@ export const backend = {
   regenerateToken: () => invoke<Settings>("regenerate_token"),
   startCapture: (onAudio: AudioChannel) => invoke<void>("start_capture", { onAudio }),
   stopCapture: () => invoke<void>("stop_capture"),
-  setCaptioning: (active: boolean, typing: boolean, session: number) =>
-    invoke<void>("set_captioning", { active, typing, session }),
+  /**
+   * Tell the bridge what the extension should do: type text (`typing`) and/or
+   * run Chrome's speech recognition on the captured audio in `lang` (`listen`).
+   */
+  setCaptioning: (active: boolean, typing: boolean, listen: boolean, lang: string, session: number) =>
+    invoke<void>("set_captioning", { active, typing, listen, lang, session }),
   bridgeSendText: (session: number, seq: number, text: string, provisional?: string) =>
     invoke<number>("bridge_send_text", { session, seq, text, provisional: provisional ?? null }),
   bridgeStatus: () => invoke<BridgeStatus>("bridge_status"),

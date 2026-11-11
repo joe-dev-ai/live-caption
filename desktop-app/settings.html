@@ -34,11 +34,19 @@
 
       <section class="card">
         <h2>Transcription</h2>
+        <div class="field">
+          <span class="label">Speech engine</span>
+          <div class="segmented" role="radiogroup" data-key="engine">
+            <button type="button" data-value="chrome">Chrome (free, unlimited)</button>
+            <button type="button" data-value="puter">Puter</button>
+          </div>
+          <p class="hint" id="engine-hint"></p>
+        </div>
         <label class="field">
           <span class="label">Language</span>
           <select id="language"></select>
         </label>
-        <div class="field">
+        <div class="field puter-only">
           <span class="label">Priority</span>
           <div class="segmented" role="radiogroup" data-key="priority">
             <button type="button" data-value="accuracy">Accuracy</button>
@@ -47,7 +55,7 @@
           </div>
           <p class="hint" id="priority-hint"></p>
         </div>
-        <label class="field">
+        <label class="field puter-only">
           <span class="label">Model</span>
           <select id="model">
             <option value="auto">Auto — Puter's default model (recommended)</option>
@@ -56,14 +64,14 @@
           <span class="hint">If Puter refuses a chosen model, its default model is used automatically.</span>
         </label>
         <label class="switch-row">
-          <span><span class="label">Live preview</span><span class="hint">Shows words in grey while they are still being spoken, then replaces them with the final text. Uses more Puter requests.</span></span>
+          <span><span class="label">Live preview</span><span class="hint">Shows words in grey while they are still being spoken, then replaces them with the final text. With Puter it uses more requests.</span></span>
           <input type="checkbox" class="switch" id="livePreview" />
         </label>
-        <label class="switch-row">
+        <label class="switch-row puter-only">
           <span><span class="label">Use recent text as context</span><span class="hint">Keeps names and terms consistent between chunks.</span></span>
           <input type="checkbox" class="switch" id="useContextPrompt" />
         </label>
-        <label class="field">
+        <label class="field puter-only">
           <span class="label">Parallel requests: <output id="maxParallel-out"></output></span>
           <input type="range" id="maxParallel" min="1" max="3" step="1" />
           <span class="hint">Puter's free plan allows 3 requests at once in total, so live previews only run when a slot is free.</span>
@@ -113,7 +121,7 @@
         <label class="field"><span class="label">Font size: <output id="fontSize-out"></output></span><input type="range" id="fontSize" min="14" max="56" step="1" /></label>
         <label class="field"><span class="label">Background opacity: <output id="bgOpacity-out"></output></span><input type="range" id="bgOpacity" min="0" max="1" step="0.05" /></label>
         <label class="switch-row">
-          <span><span class="label">Show debug info</span><span class="hint">Average chunk length, API time and speech-to-text delay.</span></span>
+          <span><span class="label">Show debug info</span><span class="hint">Speech-to-text delay and engine details.</span></span>
           <input type="checkbox" class="switch" id="showDebug" />
         </label>
       </section>
@@ -130,7 +138,7 @@
         </label>
       </section>
 
-      <section class="card">
+      <section class="card puter-only">
         <h2>Puter account</h2>
         <p id="puter-status" class="hint"></p>
         <div class="usage" id="puter-usage" hidden>

@@ -99,6 +99,14 @@ function renderDerived(): void {
   });
   // Live typing needs the live preview.
   $<HTMLInputElement>("typePreview").disabled = !settings.livePreview;
+  document.body.dataset.engine = settings.engine;
+  $("engine-hint").textContent =
+    settings.engine === "chrome"
+      ? "Chrome's built-in speech recognition, through the Live Caption Typer extension: free, no account, no " +
+        "monthly limit. Keep Chrome running with the extension paired; pick on-device or online recognition in " +
+        "the extension's popup."
+      : "Puter.js speech-to-text with your own Puter account. A free account is never charged, but its monthly " +
+        "allowance is small.";
   const p = profileFor(settings.priority, settings.model);
   $("priority-hint").textContent =
     `${modelLabel(p.model)}, chunks ${p.minChunkSec}–${p.maxChunkSec} s, cut at pauses ≥ ${Math.round(p.pauseSec * 1000)} ms.`;
@@ -124,7 +132,8 @@ function renderBridge(b: BridgeStatus): void {
     el.textContent = b.error;
     el.className = "hint warn";
   } else if (b.clients > 0) {
-    el.textContent = `Chrome extension connected (${b.clients}) on 127.0.0.1:${b.port}.`;
+    const speech = b.listeners > 0 ? " Its speech engine is running." : "";
+    el.textContent = `Chrome extension connected (${b.clients}) on 127.0.0.1:${b.port}.${speech}`;
     el.className = "hint ok";
   } else {
     el.textContent = b.listening ? `Waiting for the Chrome extension on 127.0.0.1:${b.port}…` : "Starting…";
