@@ -106,3 +106,17 @@ test("priority changes chunk length", () => {
   for (const c of accuracy) assert.ok(sec(c.endSample - c.startSample) <= 5.01);
   for (const c of speed) assert.ok(sec(c.endSample - c.startSample) <= 3.01);
 });
+
+test("reports the chunk being recorded while speech is in progress", () => {
+  const chunks: AudioChunk[] = [];
+  const chunker = new Chunker(balanced, (c) => chunks.push(c));
+  feed((s) => chunker.push(s), silence(1));
+  assert.equal(chunker.activeChunk, null);
+  feed((s) => chunker.push(s), speech(1.2));
+  const active = chunker.activeChunk!;
+  assert.ok(sec(active.startSample) >= 0.65 && sec(active.startSample) <= 1.0, `start ${sec(active.startSample)}`);
+  assert.ok(active.speechSec > 1.0);
+  feed((s) => chunker.push(s), silence(1.2));
+  assert.equal(chunker.activeChunk, null, "finished at the pause");
+  assert.equal(chunks.length, 1);
+});

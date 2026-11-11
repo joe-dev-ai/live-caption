@@ -110,7 +110,8 @@ Extension icon states:
 ### Captioning and typing
 
 * Click **▶ Start** or press **Ctrl+Alt+Q** (from any app, including Chrome) to start.
-* Speech from the remote computer appears as captions within about 2–3 s. The newest line is at the bottom.
+* As soon as someone speaks, **live preview** text appears in grey and grows while they talk. Within about 2–3 s it
+  is replaced by the final, more accurate text in white. The newest line is at the bottom.
 * While captioning is running and **Type into Chrome** is on, each finished caption chunk is inserted at the caret
   of the focused field in the active Chrome tab, with spaces added between chunks automatically. Click into a
   chat box or document in Chrome and the text appears there. Enter is never pressed and nothing is submitted.
@@ -160,6 +161,7 @@ Changes save automatically and apply right away. They are stored in
 | Transcription | Language (sent explicitly; no auto-detection) | English |
 | | Priority: **Accuracy** (2–5 s chunks) / **Balanced** (1.5–4 s) / **Speed** (1–3 s) | Balanced |
 | | Model: **Auto** (Puter's default speech-to-text model, currently `gpt-transcribe`) or `gpt-transcribe`. If Puter refuses a chosen model, the default is used automatically. | Auto |
+| | Live preview: grey provisional text while speech is in progress (uses more Puter requests; only final text is typed into Chrome) | On |
 | | Use recent text as context (sends the last 1–2 sentences as the prompt) | On |
 | | Parallel requests (1–4) | 3 |
 | Type into Chrome | On/off, pairing token (Copy / New token), local port | On, random token, 47821 |
@@ -201,6 +203,9 @@ delay (average and p90), the average speech→text delay, requests in flight, an
 * **Puter.js** (`puter.ts`): calls `puter.ai.speech2txt(wav, { language, prompt })`. With Model set to Auto, no model
   is sent, so Puter uses its current default (`gpt-transcribe`). If Puter refuses a chosen model, the app switches to
   the default and says so once; if a model rejects the `prompt` option, the app stops sending it.
+* **Live preview** (`pipeline.ts`): while speech is in progress, all audio that has no final text yet is transcribed
+  about once a second (one request at a time) and shown in grey. When a final chunk arrives, the part of the preview
+  it covers is removed so words never appear twice. Previews are never typed into Chrome or saved.
 * **Parallel and ordered** (`scheduler.ts`): sends up to 3–4 requests at once, numbers them in sequence, and always
   outputs in order. Each request has a 12 s timeout, is retried once, and is then skipped, so the stream never
   stalls.
@@ -264,12 +269,12 @@ Chrome typing without a Puter account or credits.
 ## 8. Developer tests
 
 ```bash
-# Front end: VAD/chunking, post-processing, ordered scheduler, WAV, WER, pipeline, Puter wrapper (39 tests)
+# Front end: VAD/chunking, post-processing, ordered scheduler, WAV, WER, pipeline, Puter wrapper, caption view (46 tests)
 cd desktop-app
 npm test
 npm run typecheck
 
-# Back end: resampler, PCM packetising, settings, WebSocket bridge integration tests (14 tests)
+# Back end: resampler, PCM packetising, settings, WebSocket bridge integration tests (16 tests)
 cd src-tauri
 cargo test
 
@@ -282,9 +287,10 @@ cargo run --example bridge_server -- 47821 TEST-TOKE-N123-4567
 
 ## 9. Known limitations
 
-* **Delay comes from chunking.** Puter's speech-to-text takes whole files, not a live stream, so text appears after
-  each chunk ends: typically 2–3 s from speech to text (chunk length + about 1 s API time). Use **Speed** priority
-  for less delay, or **Accuracy** for longer chunks with more context.
+* **Delay.** Puter's free speech-to-text takes whole audio files, not a live stream (Puter's streaming API needs a
+  paid plan). Live preview shows words roughly 1 s plus Puter's response time after they are spoken, and the final
+  text follows within about 2–3 s. Turn on **Show debug info** to see Puter's response time ("API") on your
+  connection. Live preview sends extra requests; turn it off in Settings to use fewer.
 * **Puter sign-in and usage.** You need a Puter account. Usage is billed to it under Puter's user-pays model, and
   if your Puter credits or limits run out, captioning stops with a message. The app needs internet access
   (`js.puter.com`, `api.puter.com`, `puter.com`).

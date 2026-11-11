@@ -39,6 +39,8 @@ pub struct Settings {
     pub use_context_prompt: bool,
     /// Maximum parallel transcription requests (1..=4).
     pub max_parallel: u32,
+    /// Show provisional captions while speech is still in progress.
+    pub live_preview: bool,
     pub type_into_chrome: bool,
     pub bridge_port: u16,
     pub pairing_token: String,
@@ -75,6 +77,7 @@ impl Default for Settings {
             model: "auto".into(),
             use_context_prompt: true,
             max_parallel: 3,
+            live_preview: true,
             type_into_chrome: true,
             bridge_port: 47821,
             pairing_token: String::new(),

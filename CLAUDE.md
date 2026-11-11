@@ -68,6 +68,9 @@ pipeline, UI, or extension.
   0.2 s of overlap, then remove the duplicated words afterwards.
 * Pass the last 1–2 sentences as the `prompt` context, and drop the prompt quietly if the provider rejects it. Always
   set the language explicitly. Apply light normalization. Skip silent chunks.
+* Live preview (on by default): while speech is in progress, transcribe the not-yet-final audio about once a second
+  (one request at a time) and show it as grey provisional text. Final in-order results replace it, and the covered
+  part of the preview is trimmed. Previews are **never typed into Chrome or written to the transcript**.
 * Run 3–4 requests in parallel with sequence numbers, and always output in order. Retry a request once, then skip it.
   The UI must never freeze.
 * Clean the output: fix spacing, punctuation and capitalization across chunk boundaries, and filter hallucinations

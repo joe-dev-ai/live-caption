@@ -172,3 +172,27 @@ export function contextPrompt(history: string, maxChars = 220): string {
   if (out.length > maxChars) out = out.slice(out.length - maxChars).replace(/^\S*\s/, "");
   return out;
 }
+
+/**
+ * Remove the start of a live preview that a newly finalized chunk already
+ * covers, so the same words are not shown twice. The preview and the final
+ * text start at the same audio, so the final's last words are looked for near
+ * the position where they should appear in the preview. Returns "" when the
+ * two cannot be aligned (the preview is then hidden until the next one).
+ */
+export function trimCovered(preview: string, finalText: string): string {
+  const tokens = preview.split(/\s+/).filter(Boolean);
+  const pw = tokens.map(word);
+  const fw = finalText.split(/\s+/).map(word).filter(Boolean);
+  if (!fw.length) return preview;
+  for (const k of [2, 1]) {
+    if (fw.length < k || (k === 1 && fw[fw.length - 1].length < 3)) continue;
+    const anchor = fw.slice(fw.length - k).join(" ");
+    const from = Math.max(0, fw.length - k - 3);
+    const to = Math.min(pw.length - k, fw.length - k + 3);
+    for (let j = from; j <= to; j++) {
+      if (pw.slice(j, j + k).join(" ") === anchor) return tokens.slice(j + k).join(" ");
+    }
+  }
+  return "";
+}

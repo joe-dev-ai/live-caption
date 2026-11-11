@@ -82,6 +82,14 @@ export class Chunker {
     return this.sampleIndex + this.pending.length;
   }
 
+  /** The chunk being recorded right now (speech in progress), if any. */
+  get activeChunk(): { startSample: number; speechSec: number } | null {
+    if (!this.current?.length) return null;
+    let speech = 0;
+    for (const f of this.current) if (f.speech) speech++;
+    return { startSample: this.current[0].start, speechSec: speech * FRAME_SEC };
+  }
+
   reset(): void {
     this.vad.reset();
     this.pending = new Float32Array(0);

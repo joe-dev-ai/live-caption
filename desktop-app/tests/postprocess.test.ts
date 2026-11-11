@@ -1,7 +1,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import type { AudioChunk } from "../src/pipeline/chunker.ts";
-import { collapseRepeats, contextPrompt, postprocess, removeOverlap } from "../src/pipeline/postprocess.ts";
+import { collapseRepeats, contextPrompt, postprocess, removeOverlap, trimCovered } from "../src/pipeline/postprocess.ts";
 
 function chunk(p: Partial<AudioChunk> = {}): AudioChunk {
   return {
@@ -72,4 +72,14 @@ test("normalises whitespace", () => {
 test("context prompt is the last two sentences", () => {
   assert.equal(contextPrompt("One. Two is here. Three is last."), "Two is here. Three is last.");
   assert.ok(contextPrompt("word ".repeat(200)).length <= 220);
+});
+
+test("trims the part of a live preview that the final text already covers", () => {
+  assert.equal(trimCovered("We are going to the store and then home", "We are going to the store."), "and then home");
+  // Small wording differences at the start do not matter; the end anchors it.
+  assert.equal(trimCovered("We are going to the store and then", "We're going to the store"), "and then");
+  assert.equal(trimCovered("hello there", "hello there"), "");
+  // Cannot align: hide the preview rather than show duplicated words.
+  assert.equal(trimCovered("something else entirely", "We are going to the store"), "");
+  assert.equal(trimCovered("keep me", ""), "keep me");
 });

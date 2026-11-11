@@ -64,6 +64,7 @@ function pipelineConfig(s: Settings): PipelineConfig {
     language: s.language,
     useContextPrompt: s.useContextPrompt,
     maxParallel: s.maxParallel,
+    livePreview: s.livePreview,
   };
 }
 
@@ -79,6 +80,7 @@ function createPipeline(s: Settings): CaptionPipeline {
       if (state.settings?.typeIntoChrome) void backend.bridgeSendText(session, meta.seq, text);
       if (state.settings?.saveTranscript) void backend.transcriptAppend(`[${clock()}] ${text}`).catch(() => {});
     },
+    onPreview: (text) => captions.setPreview(state.active ? text : ""),
     onBusy: (n) => {
       state.inFlight = n;
       render();
@@ -352,7 +354,7 @@ function renderDebug(): void {
   ui.debug.textContent = st && st.chunks
     ? `${modelLabel(prof?.model ?? "")} · chunk ${st.avgChunkSec.toFixed(1)} s · API ${sec(st.avgApiMs)} · end→text ${sec(st.avgEndToTextMs)} ` +
       `(p90 ${sec(st.p90EndToTextMs)}) · avg speech→text ${sec(st.avgWordDelayMs)} · in-flight ${st.inFlight} · ` +
-      `chunks ${st.chunks} · silent skipped ${st.skippedSilent} · filtered ${st.filtered} · failed ${st.failed}`
+      `chunks ${st.chunks}${state.settings?.livePreview ? ` · previews ${st.previews}` : ""} · silent skipped ${st.skippedSilent} · filtered ${st.filtered} · failed ${st.failed}`
     : `${modelLabel(prof?.model ?? "")} · debug: waiting for speech…`;
 }
 

@@ -11,6 +11,7 @@ export interface Settings {
   model: string;
   useContextPrompt: boolean;
   maxParallel: number;
+  livePreview: boolean;
   typeIntoChrome: boolean;
   bridgePort: number;
   pairingToken: string;
