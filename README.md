@@ -8,7 +8,7 @@ Remote computer ──Jump Desktop──▶ Local Windows PC
                                   ├─ Live Caption Overlay (Tauri desktop app)
                                   │    1. WASAPI process loopback: captures only Jump Desktop's audio
                                   │    2. 16 kHz mono PCM → voice-activity chunking (cuts at pauses)
-                                  │    3. Puter.js speech-to-text (gpt-4o-transcribe), 3 requests in parallel
+                                  │    3. Puter.js speech-to-text (gpt-transcribe), 3 requests in parallel
                                   │    4. Captions in a transparent, always-on-top overlay
                                   │    5. WebSocket bridge on 127.0.0.1 ──┐
                                   └─ Chrome + "Live Caption Typer" ◀──────┘ types into the focused field
@@ -157,8 +157,8 @@ Changes save automatically and apply right away. They are stored in
 | Audio capture | Capture mode: **Jump Desktop only** (process loopback) / **All system audio** (fallback) | Jump Desktop only |
 | | Jump Desktop process names (Advanced) | `JumpDesktop.exe, JumpClient.exe, JumpWinClient.exe` |
 | Transcription | Language (sent explicitly; no auto-detection) | English |
-| | Priority: **Accuracy** (gpt-4o-transcribe, 2–5 s chunks) / **Balanced** (gpt-4o-transcribe, 1.5–4 s) / **Speed** (gpt-4o-mini-transcribe, 1–3 s) | Balanced |
-| | Model: Auto (from priority), gpt-4o-transcribe, gpt-4o-mini-transcribe, whisper-1 | Auto |
+| | Priority: **Accuracy** (2–5 s chunks) / **Balanced** (1.5–4 s) / **Speed** (1–3 s) | Balanced |
+| | Model: **Auto** (Puter's default speech-to-text model, currently `gpt-transcribe`) or `gpt-transcribe`. If Puter refuses a chosen model, the default is used automatically. | Auto |
 | | Use recent text as context (sends the last 1–2 sentences as the prompt) | On |
 | | Parallel requests (1–4) | 3 |
 | Type into Chrome | On/off, pairing token (Copy / New token), local port | On, random token, 47821 |
@@ -197,8 +197,9 @@ delay (average and p90), the average speech→text delay, requests in flight, an
   0.25 s of speech are skipped, which saves requests.
 * **Normalization and WAV** (`wav.ts`): removes DC offset and applies a gain of up to 12×, bounded by RMS and peak
   so it never clips, then encodes a 16-bit PCM WAV.
-* **Puter.js** (`puter.ts`): calls `puter.ai.speech2txt(wav, { model, language, prompt })`. If a model rejects the
-  `prompt` option, the app stops sending it.
+* **Puter.js** (`puter.ts`): calls `puter.ai.speech2txt(wav, { language, prompt })`. With Model set to Auto, no model
+  is sent, so Puter uses its current default (`gpt-transcribe`). If Puter refuses a chosen model, the app switches to
+  the default and says so once; if a model rejects the `prompt` option, the app stops sending it.
 * **Parallel and ordered** (`scheduler.ts`): sends up to 3–4 requests at once, numbers them in sequence, and always
   outputs in order. Each request has a 12 s timeout, is retried once, and is then skipped, so the stream never
   stalls.
@@ -262,12 +263,12 @@ Chrome typing without a Puter account or credits.
 ## 8. Developer tests
 
 ```bash
-# Front end: VAD/chunking, post-processing, ordered scheduler, WAV, WER, pipeline (34 tests)
+# Front end: VAD/chunking, post-processing, ordered scheduler, WAV, WER, pipeline, Puter wrapper (39 tests)
 cd desktop-app
 npm test
 npm run typecheck
 
-# Back end: resampler, PCM packetising, settings, WebSocket bridge integration tests (12 tests)
+# Back end: resampler, PCM packetising, settings, WebSocket bridge integration tests (14 tests)
 cd src-tauri
 cargo test
 

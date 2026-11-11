@@ -40,8 +40,10 @@ pipeline, UI, or extension.
   * Never add a local speech-recognition model or another STT provider.
   * Input is WAV chunks: Puter has no live streaming.
   * Sign-in uses Puter's "user-pays" popup flow and must stay clear and explicit in the UI.
-* **Models:** `gpt-4o-transcribe` is the default. `gpt-4o-mini-transcribe` is the faster option. `whisper-1` is
-  allowed.
+* **Models:** use Puter's default speech-to-text model (currently `gpt-transcribe`) by sending **no** `model`
+  option when Model is "Auto". Puter retired the `gpt-4o-transcribe` / `gpt-4o-mini-transcribe` / `whisper-1` models
+  the app first used. An explicitly chosen model that Puter refuses must fall back to the default automatically,
+  never skip chunks.
 * **Chrome extension:** Manifest V3, plain JavaScript with `// @ts-check` and JSDoc types. It is loaded unpacked
   with **no build step**.
   * Never add `package.json` or `node_modules` to `chrome-extension/`: Chrome refuses extensions that contain names
@@ -70,7 +72,7 @@ pipeline, UI, or extension.
   The UI must never freeze.
 * Clean the output: fix spacing, punctuation and capitalization across chunk boundaries, and filter hallucinations
   ("Thank you for watching.", "Subtitles by…", repeated phrases).
-* The Priority setting (Accuracy / Balanced / Speed) controls the model and the chunk lengths (`profile.ts`).
+* The Priority setting (Accuracy / Balanced / Speed) controls the chunk lengths (`profile.ts`).
 
 **Typing into Chrome**
 * Text is inserted only while captioning is ON and **Type into Chrome** is enabled.
