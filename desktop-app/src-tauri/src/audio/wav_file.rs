@@ -57,7 +57,10 @@ pub fn read_wav(path: &Path) -> Result<WavData, String> {
                 .chunks_exact(ch)
                 .map(|f| f.iter().sum::<f32>() / ch as f32)
                 .collect();
-            return Ok(WavData { sample_rate: rate, samples });
+            return Ok(WavData {
+                sample_rate: rate,
+                samples,
+            });
         }
         pos = body + size + (size & 1);
     }

@@ -67,9 +67,7 @@ mod imp {
             let target = LAST_EXTERNAL.load(Ordering::SeqCst);
             let overlay = OVERLAY.load(Ordering::SeqCst);
             unsafe {
-                if target != 0
-                    && IsWindow(Some(hwnd(target))).as_bool()
-                    && GetForegroundWindow().0 as isize == overlay
+                if target != 0 && IsWindow(Some(hwnd(target))).as_bool() && GetForegroundWindow().0 as isize == overlay
                 {
                     let _ = SetForegroundWindow(hwnd(target));
                 }

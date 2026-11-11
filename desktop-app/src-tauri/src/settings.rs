@@ -182,7 +182,12 @@ mod tests {
 
     #[test]
     fn sanitize_clamps() {
-        let s = Settings { max_parallel: 9, font_size: 2, ..Default::default() }.sanitized();
+        let s = Settings {
+            max_parallel: 9,
+            font_size: 2,
+            ..Default::default()
+        }
+        .sanitized();
         assert_eq!(s.max_parallel, 4);
         assert_eq!(s.font_size, 12);
         assert!(!s.pairing_token.is_empty());

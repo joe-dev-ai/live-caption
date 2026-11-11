@@ -47,7 +47,12 @@ pub struct CaptureStatus {
 
 impl CaptureStatus {
     pub fn new(state: &'static str, message: impl Into<String>) -> Self {
-        Self { state, message: message.into(), process: None, pid: None }
+        Self {
+            state,
+            message: message.into(),
+            process: None,
+            pid: None,
+        }
     }
 }
 
@@ -66,7 +71,13 @@ pub struct PcmOutput {
 
 impl PcmOutput {
     pub fn new(sink: PacketSink) -> Self {
-        Self { sink, pending: Vec::with_capacity(PACKET_SAMPLES * 2), last_audio: Instant::now(), padded: 0, alive: true }
+        Self {
+            sink,
+            pending: Vec::with_capacity(PACKET_SAMPLES * 2),
+            last_audio: Instant::now(),
+            padded: 0,
+            alive: true,
+        }
     }
 
     /// Whether the web view side is still listening.
@@ -106,7 +117,11 @@ impl PcmOutput {
 
     fn flush_full(&mut self) {
         while self.alive && self.pending.len() >= PACKET_SAMPLES {
-            let bytes: Vec<u8> = self.pending.drain(..PACKET_SAMPLES).flat_map(|s| s.to_le_bytes()).collect();
+            let bytes: Vec<u8> = self
+                .pending
+                .drain(..PACKET_SAMPLES)
+                .flat_map(|s| s.to_le_bytes())
+                .collect();
             self.alive = (self.sink)(bytes);
         }
     }

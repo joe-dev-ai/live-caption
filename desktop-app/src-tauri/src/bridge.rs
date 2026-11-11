@@ -91,7 +91,12 @@ impl Bridge {
         }
         {
             let mut st = self.inner.status.lock().unwrap();
-            *st = BridgeStatus { listening: false, port, clients: 0, error: None };
+            *st = BridgeStatus {
+                listening: false,
+                port,
+                clients: 0,
+                error: None,
+            };
         }
         let inner = self.inner.clone();
         let handle = tauri::async_runtime::spawn(async move {
@@ -99,7 +104,9 @@ impl Bridge {
                 Ok(listener) => {
                     inner.update_status(|s| s.listening = true);
                     loop {
-                        let Ok((stream, _)) = listener.accept().await else { continue };
+                        let Ok((stream, _)) = listener.accept().await else {
+                            continue;
+                        };
                         let inner = inner.clone();
                         tauri::async_runtime::spawn(async move { handle_connection(inner, stream).await });
                     }
@@ -121,7 +128,8 @@ impl Bridge {
     /// a previous session is ignored by both sides.
     pub fn set_state(&self, active: bool, session: u64) {
         *self.inner.typing.lock().unwrap() = TypingState { active, session };
-        self.inner.broadcast(json!({ "type": "state", "active": active, "session": session }));
+        self.inner
+            .broadcast(json!({ "type": "state", "active": active, "session": session }));
     }
 
     /// Forward a finalized caption chunk. Returns the number of clients it was
@@ -131,7 +139,8 @@ impl Bridge {
         if !st.active || st.session != session || text.trim().is_empty() {
             return 0;
         }
-        self.inner.broadcast(json!({ "type": "text", "session": session, "seq": seq, "text": text }))
+        self.inner
+            .broadcast(json!({ "type": "text", "session": session, "seq": seq, "text": text }))
     }
 }
 
@@ -149,7 +158,10 @@ impl Inner {
     fn broadcast(&self, msg: Value) -> usize {
         let text = msg.to_string();
         let clients = self.clients.lock().unwrap();
-        clients.values().filter(|tx| tx.send(Message::text(text.clone())).is_ok()).count()
+        clients
+            .values()
+            .filter(|tx| tx.send(Message::text(text.clone())).is_ok())
+            .count()
     }
 }
 
@@ -189,7 +201,8 @@ fn check_origin(req: &Request, resp: Response) -> Result<Response, ErrorResponse
 }
 
 async fn handle_connection(inner: Arc<Inner>, stream: TcpStream) {
-    let Ok(Ok(ws)) = tokio::time::timeout(AUTH_TIMEOUT, tokio_tungstenite::accept_hdr_async(stream, check_origin)).await
+    let Ok(Ok(ws)) =
+        tokio::time::timeout(AUTH_TIMEOUT, tokio_tungstenite::accept_hdr_async(stream, check_origin)).await
     else {
         return;
     };
@@ -209,7 +222,11 @@ async fn handle_connection(inner: Arc<Inner>, stream: TcpStream) {
     if !authed {
         // Slow down guessing, then tell the extension why.
         tokio::time::sleep(Duration::from_millis(800)).await;
-        let _ = sink.send(Message::text(json!({ "type": "auth_error", "reason": "bad_token" }).to_string())).await;
+        let _ = sink
+            .send(Message::text(
+                json!({ "type": "auth_error", "reason": "bad_token" }).to_string(),
+            ))
+            .await;
         let _ = sink.close().await;
         return;
     }

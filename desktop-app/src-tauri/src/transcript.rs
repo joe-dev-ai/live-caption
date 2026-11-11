@@ -14,7 +14,10 @@ impl Transcript {
     /// local time; only digits, '-' and '_' are kept.
     pub fn create(dir: &Path, stamp: &str) -> Result<Self, String> {
         fs::create_dir_all(dir).map_err(|e| format!("Cannot create {}: {e}", dir.display()))?;
-        let stamp: String = stamp.chars().filter(|c| c.is_ascii_digit() || *c == '-' || *c == '_').collect();
+        let stamp: String = stamp
+            .chars()
+            .filter(|c| c.is_ascii_digit() || *c == '-' || *c == '_')
+            .collect();
         let path = dir.join(format!("transcript-{stamp}.txt"));
         let file = OpenOptions::new()
             .create(true)

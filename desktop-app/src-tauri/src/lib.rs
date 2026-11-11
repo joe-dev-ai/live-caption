@@ -197,7 +197,10 @@ fn transcript_begin(app: AppHandle, state: State<AppState>, stamp: String) -> Re
         return Ok(None);
     }
     let dir = if s.transcript_dir.trim().is_empty() {
-        app.path().document_dir().map_err(|e| e.to_string())?.join("Live Captions")
+        app.path()
+            .document_dir()
+            .map_err(|e| e.to_string())?
+            .join("Live Captions")
     } else {
         PathBuf::from(s.transcript_dir.trim())
     };
@@ -224,9 +227,15 @@ fn apply_settings(app: &AppHandle, state: &AppState, new: Settings) -> Result<Se
     if old.bridge_port != new.bridge_port || old.pairing_token != new.pairing_token {
         state.bridge.restart(new.bridge_port, &new.pairing_token);
     }
-    if (old.hotkey_toggle.as_str(), old.hotkey_show_hide.as_str(), old.hotkey_typing.as_str())
-        != (new.hotkey_toggle.as_str(), new.hotkey_show_hide.as_str(), new.hotkey_typing.as_str())
-    {
+    if (
+        old.hotkey_toggle.as_str(),
+        old.hotkey_show_hide.as_str(),
+        old.hotkey_typing.as_str(),
+    ) != (
+        new.hotkey_toggle.as_str(),
+        new.hotkey_show_hide.as_str(),
+        new.hotkey_typing.as_str(),
+    ) {
         register_hotkeys(app, &new);
     }
     let _ = app.emit("settings-changed", &new);
@@ -242,8 +251,11 @@ fn register_hotkeys(app: &AppHandle, s: &Settings) {
     let gs = app.global_shortcut();
     let _ = gs.unregister_all();
     let mut errors = Vec::new();
-    let bindings: [(&str, &str); 3] =
-        [(&s.hotkey_toggle, "toggle"), (&s.hotkey_show_hide, "show_hide"), (&s.hotkey_typing, "typing")];
+    let bindings: [(&str, &str); 3] = [
+        (&s.hotkey_toggle, "toggle"),
+        (&s.hotkey_show_hide, "show_hide"),
+        (&s.hotkey_typing, "typing"),
+    ];
     for (keys, action) in bindings {
         if keys.trim().is_empty() {
             continue;
@@ -416,7 +428,10 @@ pub fn run() {
                 };
             }));
             bridge.restart(settings.bridge_port, &settings.pairing_token);
-            let jump = Arc::new(Mutex::new(JumpStatus { supported: cfg!(windows), ..Default::default() }));
+            let jump = Arc::new(Mutex::new(JumpStatus {
+                supported: cfg!(windows),
+                ..Default::default()
+            }));
             app.manage(AppState {
                 settings: Mutex::new(settings.clone()),
                 settings_path,

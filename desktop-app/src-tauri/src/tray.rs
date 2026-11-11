@@ -38,7 +38,12 @@ impl Tray {
                 _ => {}
             })
             .on_tray_icon_event(|tray, event| {
-                if let TrayIconEvent::Click { button: MouseButton::Left, button_state: MouseButtonState::Up, .. } = event {
+                if let TrayIconEvent::Click {
+                    button: MouseButton::Left,
+                    button_state: MouseButtonState::Up,
+                    ..
+                } = event
+                {
                     crate::toggle_overlay(tray.app_handle());
                 }
             })
@@ -56,6 +61,8 @@ impl Tray {
         } else {
             "Live Caption Overlay — idle"
         }));
-        let _ = self.toggle_item.set_text(if active { "Stop captioning" } else { "Start captioning" });
+        let _ = self
+            .toggle_item
+            .set_text(if active { "Stop captioning" } else { "Start captioning" });
     }
 }

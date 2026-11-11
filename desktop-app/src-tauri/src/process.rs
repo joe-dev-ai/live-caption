@@ -21,10 +21,17 @@ pub fn find_jump_desktop(names: &[String]) -> Option<ProcInfo> {
     let mut matches: Vec<(u32, u32, String, usize)> = Vec::new(); // pid, ppid, name, rank
     unsafe {
         let snapshot = CreateToolhelp32Snapshot(TH32CS_SNAPPROCESS, 0).ok()?;
-        let mut entry = PROCESSENTRY32W { dwSize: std::mem::size_of::<PROCESSENTRY32W>() as u32, ..Default::default() };
+        let mut entry = PROCESSENTRY32W {
+            dwSize: std::mem::size_of::<PROCESSENTRY32W>() as u32,
+            ..Default::default()
+        };
         let mut ok = Process32FirstW(snapshot, &mut entry).is_ok();
         while ok {
-            let len = entry.szExeFile.iter().position(|c| *c == 0).unwrap_or(entry.szExeFile.len());
+            let len = entry
+                .szExeFile
+                .iter()
+                .position(|c| *c == 0)
+                .unwrap_or(entry.szExeFile.len());
             let exe = String::from_utf16_lossy(&entry.szExeFile[..len]);
             let lower = exe.to_lowercase();
             if let Some(rank) = names.iter().position(|n| *n == lower) {
@@ -42,7 +49,10 @@ pub fn find_jump_desktop(names: &[String]) -> Option<ProcInfo> {
         .filter(|m| !pids.contains(&m.1))
         .min_by_key(|m| (m.3, m.0))
         .or_else(|| matches.iter().min_by_key(|m| (m.3, m.0)))
-        .map(|m| ProcInfo { pid: m.0, name: m.2.clone() })
+        .map(|m| ProcInfo {
+            pid: m.0,
+            name: m.2.clone(),
+        })
 }
 
 #[cfg(windows)]

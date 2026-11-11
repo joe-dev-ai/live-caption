@@ -18,7 +18,9 @@ type Events = Arc<Mutex<Vec<(String, Value)>>>;
 fn start_bridge(port: u16) -> (Bridge, Events) {
     let events: Events = Arc::default();
     let ev = events.clone();
-    let bridge = Bridge::new(Arc::new(move |name, payload| ev.lock().unwrap().push((name.to_string(), payload))));
+    let bridge = Bridge::new(Arc::new(move |name, payload| {
+        ev.lock().unwrap().push((name.to_string(), payload))
+    }));
     bridge.restart(port, TOKEN);
     (bridge, events)
 }
@@ -61,7 +63,9 @@ async fn eventually(mut cond: impl FnMut() -> bool) -> bool {
 }
 
 async fn hello(ws: &mut Ws, token: &str) -> Option<Value> {
-    ws.send(Message::text(json!({ "type": "hello", "token": token }).to_string())).await.unwrap();
+    ws.send(Message::text(json!({ "type": "hello", "token": token }).to_string()))
+        .await
+        .unwrap();
     recv(ws).await
 }
 
@@ -94,7 +98,10 @@ async fn types_only_while_active_and_for_current_session() {
 
     assert_eq!(b.send_text(1, 0, "too early"), 0, "nothing sent before Start");
     b.set_state(true, 42);
-    assert_eq!(recv(&mut ws).await.unwrap(), json!({ "type": "state", "active": true, "session": 42 }));
+    assert_eq!(
+        recv(&mut ws).await.unwrap(),
+        json!({ "type": "state", "active": true, "session": 42 })
+    );
     assert_eq!(b.send_text(42, 1, "hello world"), 1);
     assert_eq!(
         recv(&mut ws).await.unwrap(),
@@ -109,8 +116,19 @@ async fn types_only_while_active_and_for_current_session() {
     // Ping/pong and ack forwarding.
     ws.send(Message::text(r#"{"type":"ping"}"#)).await.unwrap();
     assert_eq!(recv(&mut ws).await.unwrap()["type"], "pong");
-    ws.send(Message::text(r#"{"type":"ack","session":42,"seq":1,"result":"inserted"}"#)).await.unwrap();
-    assert!(eventually(|| events.lock().unwrap().iter().any(|(n, v)| n == "bridge-ack" && v["result"] == "inserted")).await);
+    ws.send(Message::text(
+        r#"{"type":"ack","session":42,"seq":1,"result":"inserted"}"#,
+    ))
+    .await
+    .unwrap();
+    assert!(
+        eventually(|| events
+            .lock()
+            .unwrap()
+            .iter()
+            .any(|(n, v)| n == "bridge-ack" && v["result"] == "inserted"))
+        .await
+    );
 }
 
 #[tokio::test(flavor = "multi_thread")]

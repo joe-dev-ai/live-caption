@@ -25,7 +25,10 @@ enum Target {
 
 pub fn run(source: &Source, stop: &AtomicBool, out: &mut PcmOutput, status: &StatusFn) {
     if wasapi::initialize_mta().is_err() {
-        status(CaptureStatus::new("error", "Could not initialise COM for audio capture"));
+        status(CaptureStatus::new(
+            "error",
+            "Could not initialise COM for audio capture",
+        ));
         return;
     }
     while !stop.load(Ordering::SeqCst) && out.alive() {
@@ -84,14 +87,24 @@ fn capture(target: Target, stop: &AtomicBool, out: &mut PcmOutput) -> Result<(),
         }
     };
     let mode = if events {
-        StreamMode::EventsShared { autoconvert: true, buffer_duration_hns: 0 }
+        StreamMode::EventsShared {
+            autoconvert: true,
+            buffer_duration_hns: 0,
+        }
     } else {
-        StreamMode::PollingShared { autoconvert: true, buffer_duration_hns: 1_000_000 }
+        StreamMode::PollingShared {
+            autoconvert: true,
+            buffer_duration_hns: 1_000_000,
+        }
     };
     client
         .initialize_client(&format, Direction::Capture, mode, None)
         .map_err(|e| e.to_string())?;
-    let event = if events { Some(client.set_get_eventhandle().map_err(|e| e.to_string())?) } else { None };
+    let event = if events {
+        Some(client.set_get_eventhandle().map_err(|e| e.to_string())?)
+    } else {
+        None
+    };
     let capture = client.get_audiocaptureclient().map_err(|e| e.to_string())?;
     client.start_stream().map_err(|e| e.to_string())?;
 
