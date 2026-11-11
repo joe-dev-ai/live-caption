@@ -133,6 +133,8 @@ Extension icon states:
 | **Chrome** chip | Toggle typing into Chrome (green: extension connected, amber: offline, grey: typing off) |
 | **Jump Desktop** chip | Green: Jump Desktop found. Amber: "Jump Desktop not detected" |
 | Scroll in the caption area | Reread earlier captions from this session. New captions keep arriving at the bottom; **↓ Latest** jumps back to them |
+| Drag over captions, then **⧉ Copy** | Copies the selected text, or all captions if nothing is selected. (Ctrl+C can't work here: the overlay never takes keyboard focus, so Chrome keeps it.) |
+| **Clear** (broom icon) | Empties the caption area; captioning keeps running |
 | ⚙ | Settings |
 | — | Minimize to tray (closing the window also hides it to the tray) |
 

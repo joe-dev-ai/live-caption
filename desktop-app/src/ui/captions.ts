@@ -52,6 +52,35 @@ export class CaptionView {
     });
   }
 
+  /** Caption text the user selected with the mouse ("" if none). */
+  selectedText(): string {
+    const sel = document.getSelection();
+    if (!sel || sel.isCollapsed || !sel.rangeCount) return "";
+    const range = sel.getRangeAt(0);
+    if (!this.scroller.contains(range.commonAncestorContainer)) return "";
+    return sel.toString().trim();
+  }
+
+  /** All final caption text, one line per caption line (no live preview). */
+  allText(): string {
+    return [...this.stack.querySelectorAll<HTMLElement>(".line > span:first-child")]
+      .map((s) => s.textContent ?? "")
+      .filter(Boolean)
+      .join("\n");
+  }
+
+  /** Remove every caption from the view (captioning itself keeps running). */
+  clear(): void {
+    this.stack.replaceChildren(this.placeholder);
+    this.line = null;
+    this.finalSpan = null;
+    this.previewSpan = null;
+    this.current = "";
+    this.lastTextAt = 0;
+    this.jump.hidden = true;
+    document.getSelection()?.removeAllRanges();
+  }
+
   /** Text shown while there are no captions yet. */
   setPlaceholder(text: string): void {
     this.placeholder.textContent = text;
@@ -124,7 +153,8 @@ export class CaptionView {
 
   /** Apply a DOM change, keeping the view pinned to the bottom if it was there. */
   private update(change: () => void): void {
-    const follow = this.atBottom();
+    // Don't scroll away from text the user is selecting.
+    const follow = this.atBottom() && !this.selectedText();
     change();
     if (follow) this.scrollToBottom();
     else this.jump.hidden = false;

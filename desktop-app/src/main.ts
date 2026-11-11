@@ -23,6 +23,8 @@ const ui = {
   chipSource: document.getElementById("chip-source") as HTMLButtonElement,
   chipChrome: document.getElementById("chip-chrome") as HTMLButtonElement,
   toggle: document.getElementById("btn-toggle") as HTMLButtonElement,
+  copy: document.getElementById("btn-copy") as HTMLButtonElement,
+  clear: document.getElementById("btn-clear") as HTMLButtonElement,
   settings: document.getElementById("btn-settings") as HTMLButtonElement,
   hide: document.getElementById("btn-hide") as HTMLButtonElement,
   banner: document.getElementById("banner")!,
@@ -52,7 +54,7 @@ const state = {
   sessionText: "",
   testFinishedAt: 0,
   lastAck: null as { result: AckResult; at: number } | null,
-  transient: null as { text: string; until: number } | null,
+  transient: null as { text: string; until: number; kind: "info" | "warn" } | null,
   banner: null as Banner,
   stats: null as PipelineStats | null,
 };
@@ -280,14 +282,16 @@ const ACK_TEXT: Partial<Record<AckResult, string>> = {
 
 function statusInfo(): { kind: string; text: string } {
   const now = Date.now();
+  const transient = state.transient && state.transient.until > now ? state.transient : null;
   if (!state.active) {
+    if (transient) return { kind: transient.kind, text: transient.text };
     if (state.banner?.error) return { kind: "error", text: "Error" };
     return { kind: "idle", text: "Idle" };
   }
   if (state.capture?.state === "error") return { kind: "error", text: state.capture.message };
   if (state.capture?.state === "waiting") return { kind: "warn", text: state.capture.message };
   if (state.capture?.state === "finished" && state.inFlight === 0) return { kind: "listening", text: state.capture.message };
-  if (state.transient && state.transient.until > now) return { kind: "warn", text: state.transient.text };
+  if (transient) return { kind: transient.kind, text: transient.text };
   const ack = state.lastAck;
   if (ack && ack.result !== "inserted" && ack.result !== "inactive" && now - ack.at < 4000) {
     return { kind: "warn", text: ACK_TEXT[ack.result] ?? "Not typing" };
@@ -380,8 +384,8 @@ function clearBannerIf(pred: (b: Banner) => boolean): void {
   if (state.banner && pred(state.banner)) setBanner(null);
 }
 
-function flash(text: string, ms = 3500): void {
-  state.transient = { text, until: Date.now() + ms };
+function flash(text: string, ms = 3500, kind: "info" | "warn" = "warn"): void {
+  state.transient = { text, until: Date.now() + ms, kind };
   render();
   setTimeout(render, ms + 50);
 }
@@ -451,12 +455,31 @@ function noFocus(el: HTMLElement): void {
 }
 
 function wireUi(): void {
+  ui.copy.innerHTML = icon("copy");
+  ui.clear.innerHTML = icon("clearAll");
   ui.settings.innerHTML = icon("settings");
   ui.hide.innerHTML = icon("minimize");
   ui.bannerClose.innerHTML = icon("close");
-  for (const b of [ui.toggle, ui.settings, ui.hide, ui.chipChrome, ui.bannerAction, ui.bannerClose]) noFocus(b);
+  // noFocus also keeps the caption selection alive when Copy is clicked.
+  for (const b of [ui.toggle, ui.copy, ui.clear, ui.settings, ui.hide, ui.chipChrome, ui.bannerAction, ui.bannerClose]) {
+    noFocus(b);
+  }
 
   ui.toggle.addEventListener("click", () => toggle(true));
+  ui.copy.addEventListener("click", () => {
+    const selected = captions.selectedText();
+    const text = selected || captions.allText();
+    if (!text) return flash("No captions to copy yet", 2500, "info");
+    backend
+      .copyText(text)
+      .then(() => flash(selected ? "Copied the selected text" : "Copied all captions", 2500, "info"))
+      .catch((e) => flash(`Copy failed: ${errorText(e)}`));
+  });
+  ui.clear.addEventListener("click", () => {
+    captions.clear();
+    renderCaptions();
+    flash("Captions cleared", 2000, "info");
+  });
   ui.settings.addEventListener("click", () => void backend.openSettings());
   ui.hide.addEventListener("click", () => void backend.hideOverlay());
   ui.bannerAction.addEventListener("click", () => state.banner?.action?.run());

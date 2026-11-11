@@ -103,7 +103,9 @@ pipeline, UI, or extension.
 * The overlay is frameless, transparent, adjustable in opacity, always on top, resizable from all edges, and
   draggable by the top bar. Size, position and settings are remembered between launches.
 * The caption area keeps the whole history (up to 1000 lines) with a visible scrollbar. It follows new text while
-  scrolled to the bottom; when the user scrolls up it stays put and shows a "Latest" button.
+  scrolled to the bottom; when the user scrolls up or selects text it stays put and shows a "Latest" button.
+  Captions are selectable. The Copy button copies the selection (or everything) through the native clipboard,
+  because the overlay never has keyboard focus. Clear empties the view without stopping captioning.
 * The overlay must **never steal keyboard focus from Chrome**: keep `focusable(false)` and the Windows focus guard.
   Global hotkeys are configurable (default Ctrl+Alt+Q for Start/Stop). Never use a plain key or an Alt-only
   combination as a default: Windows can't register plain keys, and Alt-only combinations move Chrome's focus to its

@@ -22,6 +22,7 @@ export const backend = {
   hotkeyErrors: () => invoke<string[]>("hotkey_errors"),
   suspendHotkeys: (suspended: boolean) => invoke<void>("suspend_hotkeys", { suspended }),
   openSettings: () => invoke<void>("open_settings"),
+  copyText: (text: string) => invoke<void>("copy_text", { text }),
   hideOverlay: () => invoke<void>("hide_overlay"),
   transcriptBegin: (stamp: string) => invoke<string | null>("transcript_begin", { stamp }),
   transcriptAppend: (line: string) => invoke<void>("transcript_append", { line }),

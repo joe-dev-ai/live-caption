@@ -30,6 +30,7 @@ use std::time::Duration;
 use tauri::ipc::{Channel, InvokeResponseBody};
 use tauri::webview::{NewWindowFeatures, NewWindowResponse};
 use tauri::{AppHandle, Emitter, Manager, State, WebviewUrl, WebviewWindow, WebviewWindowBuilder, WindowEvent, Wry};
+use tauri_plugin_clipboard_manager::ClipboardExt;
 use tauri_plugin_global_shortcut::{GlobalShortcutExt, ShortcutState};
 use tauri_plugin_window_state::{AppHandleExt, StateFlags};
 use transcript::Transcript;
@@ -198,6 +199,13 @@ fn suspend_hotkeys(app: AppHandle, state: State<AppState>, suspended: bool) {
         let s = state.settings.lock().unwrap().clone();
         register_hotkeys(&app, &s);
     }
+}
+
+/// Copy caption text to the clipboard. Done natively because the overlay
+/// never has keyboard focus, which the web clipboard API requires.
+#[tauri::command]
+fn copy_text(app: AppHandle, text: String) -> Result<(), String> {
+    app.clipboard().write_text(text).map_err(|e| e.to_string())
 }
 
 #[tauri::command]
@@ -460,6 +468,7 @@ pub fn run() {
             }
         }))
         .plugin(tauri_plugin_global_shortcut::Builder::new().build())
+        .plugin(tauri_plugin_clipboard_manager::init())
         .plugin(
             tauri_plugin_window_state::Builder::new()
                 .with_state_flags(StateFlags::SIZE | StateFlags::POSITION)
@@ -521,6 +530,7 @@ pub fn run() {
             app_info,
             hotkey_errors,
             suspend_hotkeys,
+            copy_text,
             open_settings,
             hide_overlay,
             transcript_begin,
