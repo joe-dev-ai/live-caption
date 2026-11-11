@@ -48,7 +48,6 @@ pub struct Settings {
     pub hotkey_typing: String,
     pub font_size: u32,
     pub bg_opacity: f64,
-    pub caption_lines: u32,
     pub save_transcript: bool,
     /// Folder for transcript files; empty = Documents/Live Captions.
     pub transcript_dir: String,
@@ -84,7 +83,6 @@ impl Default for Settings {
             hotkey_typing: "Ctrl+Alt+T".into(),
             font_size: 26,
             bg_opacity: 0.6,
-            caption_lines: 4,
             save_transcript: false,
             transcript_dir: String::new(),
             show_debug: false,
@@ -97,7 +95,6 @@ impl Settings {
     pub fn sanitized(mut self) -> Self {
         self.max_parallel = self.max_parallel.clamp(1, 4);
         self.font_size = self.font_size.clamp(12, 72);
-        self.caption_lines = self.caption_lines.clamp(1, 10);
         self.bg_opacity = self.bg_opacity.clamp(0.0, 1.0);
         if self.bridge_port < 1024 {
             self.bridge_port = 47821;

@@ -24,7 +24,7 @@ type NumKey = { [K in keyof Settings]: Settings[K] extends number ? K : never }[
 type StrKey = { [K in keyof Settings]: Settings[K] extends string ? K : never }[keyof Settings];
 
 const BOOL_KEYS: BoolKey[] = ["useContextPrompt", "typeIntoChrome", "showDebug", "saveTranscript"];
-const RANGE_KEYS: NumKey[] = ["maxParallel", "fontSize", "bgOpacity", "captionLines"];
+const RANGE_KEYS: NumKey[] = ["maxParallel", "fontSize", "bgOpacity"];
 const TEXT_KEYS: StrKey[] = ["jumpProcessNames", "transcriptDir"];
 const HOTKEY_KEYS: StrKey[] = ["hotkeyToggle", "hotkeyShowHide", "hotkeyTyping"];
 

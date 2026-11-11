@@ -10,6 +10,7 @@ import { modelLabel, profileFor } from "./pipeline/profile.ts";
 import { fakeTranscribe } from "./pipeline/fake-stt.ts";
 import { classifyError, loadPuter, onModelFallback, transcribeWithPuter } from "./pipeline/puter.ts";
 import { wordErrorRate } from "./pipeline/wer.ts";
+import { CaptionView } from "./ui/captions.ts";
 import { icon } from "./ui/icons.ts";
 
 // ------------------------------------------------------------------ state
@@ -28,6 +29,7 @@ const ui = {
   bannerAction: document.getElementById("banner-action") as HTMLButtonElement,
   bannerClose: document.getElementById("banner-close") as HTMLButtonElement,
   captions: document.getElementById("captions")!,
+  jumpLatest: document.getElementById("jump-latest") as HTMLButtonElement,
   debug: document.getElementById("debug")!,
 };
 
@@ -51,9 +53,6 @@ const state = {
   lastAck: null as { result: AckResult; at: number } | null,
   transient: null as { text: string; until: number } | null,
   banner: null as Banner,
-  lines: [] as string[],
-  current: "",
-  lastTextAt: 0,
   stats: null as PipelineStats | null,
 };
 
@@ -75,7 +74,7 @@ function createPipeline(s: Settings): CaptionPipeline {
     onText: (text, meta) => {
       if (!state.active) return;
       state.sessionText += ` ${text}`;
-      appendCaption(text);
+      captions.append(text);
       const session = state.session;
       if (state.settings?.typeIntoChrome) void backend.bridgeSendText(session, meta.seq, text);
       if (state.settings?.saveTranscript) void backend.transcriptAppend(`[${clock()}] ${text}`).catch(() => {});
@@ -126,6 +125,7 @@ async function start(fromClick: boolean): Promise<void> {
     }
   }
 
+  captions.addSeparator(`Started ${clock()}`);
   state.active = true;
   state.session = Date.now();
   state.capture = null;
@@ -244,39 +244,13 @@ function showSignInBanner(text = "Sign in to Puter to start captions (free accou
 
 // --------------------------------------------------------- captions
 
-function appendCaption(text: string): void {
-  const now = Date.now();
-  const cur = state.current;
-  const endsSentence = /[.!?…]["'”’)]?$/.test(cur);
-  if (cur && (now - state.lastTextAt > 4000 || (endsSentence && cur.length > 70) || cur.length > 220)) {
-    state.lines.push(cur);
-    state.current = "";
-    if (state.lines.length > 30) state.lines.splice(0, state.lines.length - 30);
-  }
-  state.current = state.current ? `${state.current} ${text}` : text;
-  state.lastTextAt = now;
-  renderCaptions();
-}
+const captions = new CaptionView(ui.captions, ui.jumpLatest);
 
 function renderCaptions(): void {
-  const n = state.settings?.captionLines ?? 4;
-  const all = [...state.lines, state.current].filter(Boolean).slice(-n);
-  ui.captions.replaceChildren();
-  if (!all.length) {
-    const p = document.createElement("div");
-    p.className = "placeholder";
-    p.textContent = state.active ? "Listening…" : `Press Start (${state.settings?.hotkeyToggle || "Start"}) to begin captioning.`;
-    ui.captions.append(p);
-    return;
-  }
-  all.forEach((text, i) => {
-    const div = document.createElement("div");
-    div.className = "line" + (i < all.length - 1 ? " old" : "");
-    if (i === all.length - 1 && state.active && state.inFlight > 0) div.classList.add("pending");
-    div.textContent = text;
-    ui.captions.append(div);
-  });
-  ui.captions.scrollTop = ui.captions.scrollHeight;
+  captions.setPlaceholder(
+    state.active ? "Listening…" : `Press Start (${state.settings?.hotkeyToggle || "Start"}) to begin captioning.`,
+  );
+  captions.setPending(state.active && state.inFlight > 0);
 }
 
 // ------------------------------------------------------------ status

@@ -19,7 +19,6 @@ export interface Settings {
   hotkeyTyping: string;
   fontSize: number;
   bgOpacity: number;
-  captionLines: number;
   saveTranscript: boolean;
   transcriptDir: string;
   showDebug: boolean;

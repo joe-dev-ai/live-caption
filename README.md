@@ -128,6 +128,7 @@ Extension icon states:
 | ▶ Start / ■ Stop | Toggle captioning |
 | **Chrome** chip | Toggle typing into Chrome (green: extension connected, amber: offline, grey: typing off) |
 | **Jump Desktop** chip | Green: Jump Desktop found. Amber: "Jump Desktop not detected" |
+| Scroll in the caption area | Reread earlier captions from this session. New captions keep arriving at the bottom; **↓ Latest** jumps back to them |
 | ⚙ | Settings |
 | — | Minimize to tray (closing the window also hides it to the tray) |
 
@@ -163,7 +164,7 @@ Changes save automatically and apply right away. They are stored in
 | | Parallel requests (1–4) | 3 |
 | Type into Chrome | On/off, pairing token (Copy / New token), local port | On, random token, 47821 |
 | Hotkeys | Start/Stop, Show/Hide, Typing on/off (click a field, press the keys; Backspace clears it) | see above |
-| Appearance | Font size, background opacity, number of caption lines, debug info | 26 px, 60 %, 4 lines, off |
+| Appearance | Font size, background opacity, debug info. The caption area keeps the whole session: scroll up to reread, and click **Latest** to jump back | 26 px, 60 %, off |
 | Transcript | Save a `.txt` file with timestamps (a new file each time you press Start); folder | Off, `Documents\Live Captions` |
 | Puter account | Shows who is signed in; Sign out | — |
 
