@@ -42,6 +42,8 @@ pub struct Settings {
     /// Show provisional captions while speech is still in progress.
     pub live_preview: bool,
     pub type_into_chrome: bool,
+    /// Type the live preview immediately and correct it in place.
+    pub type_preview: bool,
     pub bridge_port: u16,
     pub pairing_token: String,
     /// Global hotkeys (empty string disables a hotkey).
@@ -79,6 +81,7 @@ impl Default for Settings {
             max_parallel: 3,
             live_preview: true,
             type_into_chrome: true,
+            type_preview: true,
             bridge_port: 47821,
             pairing_token: String::new(),
             hotkey_toggle: DEFAULT_TOGGLE_HOTKEY.into(),

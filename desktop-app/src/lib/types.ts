@@ -13,6 +13,8 @@ export interface Settings {
   maxParallel: number;
   livePreview: boolean;
   typeIntoChrome: boolean;
+  /** Type the live preview right away and correct it in place. */
+  typePreview: boolean;
   bridgePort: number;
   pairingToken: string;
   hotkeyToggle: string;

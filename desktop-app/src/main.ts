@@ -9,6 +9,7 @@ import { CaptionPipeline, type PipelineConfig, type PipelineStats } from "./pipe
 import { modelLabel, profileFor } from "./pipeline/profile.ts";
 import { fakeTranscribe } from "./pipeline/fake-stt.ts";
 import { classifyError, loadPuter, onModelFallback, transcribeWithPuter } from "./pipeline/puter.ts";
+import { TypingPlanner } from "./pipeline/typing.ts";
 import { wordErrorRate } from "./pipeline/wer.ts";
 import { CaptionView } from "./ui/captions.ts";
 import { icon } from "./ui/icons.ts";
@@ -70,17 +71,27 @@ function pipelineConfig(s: Settings): PipelineConfig {
 
 let pipeline: CaptionPipeline | null = null;
 
+/** Sends final text (and, with live typing, the provisional tail) to Chrome. */
+const typing = new TypingPlanner(
+  (m) => {
+    if (state.active && state.settings?.typeIntoChrome) void backend.bridgeSendText(state.session, m.seq, m.text, m.provisional);
+  },
+  () => !!state.settings?.livePreview && !!state.settings?.typePreview,
+);
+
 function createPipeline(s: Settings): CaptionPipeline {
   return new CaptionPipeline(pipelineConfig(s), state.fakeStt ? fakeTranscribe : transcribeWithPuter, {
-    onText: (text, meta) => {
+    onText: (text) => {
       if (!state.active) return;
       state.sessionText += ` ${text}`;
       captions.append(text);
-      const session = state.session;
-      if (state.settings?.typeIntoChrome) void backend.bridgeSendText(session, meta.seq, text);
+      typing.final(text);
       if (state.settings?.saveTranscript) void backend.transcriptAppend(`[${clock()}] ${text}`).catch(() => {});
     },
-    onPreview: (text) => captions.setPreview(state.active ? text : ""),
+    onPreview: (text) => {
+      captions.setPreview(state.active ? text : "");
+      typing.previewChanged(state.active ? text : "");
+    },
     onBusy: (n) => {
       state.inFlight = n;
       render();
@@ -136,6 +147,7 @@ async function start(fromClick: boolean): Promise<void> {
   state.testFinishedAt = 0;
   clearBannerIf((b) => !b?.error);
   pipeline?.reset();
+  typing.reset();
   render(); // instant feedback
 
   const session = state.session;
@@ -170,6 +182,7 @@ function stop(): void {
   state.inFlight = 0;
   void backend.setCaptioning(false, false, 0);
   pipeline?.reset();
+  typing.reset();
   void backend.stopCapture();
   render();
 }

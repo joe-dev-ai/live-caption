@@ -146,8 +146,14 @@ fn set_captioning(state: State<AppState>, active: bool, typing: bool, session: u
 }
 
 #[tauri::command]
-fn bridge_send_text(state: State<AppState>, session: u64, seq: u64, text: String) -> usize {
-    state.bridge.send_text(session, seq, &text)
+fn bridge_send_text(
+    state: State<AppState>,
+    session: u64,
+    seq: u64,
+    text: String,
+    provisional: Option<String>,
+) -> usize {
+    state.bridge.send_text(session, seq, &text, provisional.as_deref())
 }
 
 #[tauri::command]

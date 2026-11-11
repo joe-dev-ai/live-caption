@@ -70,7 +70,7 @@ pipeline, UI, or extension.
   set the language explicitly. Apply light normalization. Skip silent chunks.
 * Live preview (on by default): while speech is in progress, transcribe the not-yet-final audio about once a second
   (one request at a time) and show it as grey provisional text. Final in-order results replace it, and the covered
-  part of the preview is trimmed. Previews are **never typed into Chrome or written to the transcript**.
+  part of the preview is trimmed. Previews are **never written to the transcript**.
 * Run 3–4 requests in parallel with sequence numbers, and always output in order. Retry a request once, then skip it.
   The UI must never freeze.
 * Clean the output: fix spacing, punctuation and capitalization across chunk boundaries, and filter hallucinations
@@ -79,6 +79,10 @@ pipeline, UI, or extension.
 
 **Typing into Chrome**
 * Text is inserted only while captioning is ON and **Type into Chrome** is enabled.
+* Live typing ("Type the live preview immediately", on by default): the preview minus its last word is typed at once
+  and corrected in place by later updates, replacing only the changed characters. The extension may only edit text
+  it typed itself, and only while that text is still exactly what precedes the caret. Otherwise it must leave the
+  page text alone and type only the words not typed before. Final text is never deleted.
 * **Stop halts insertion immediately.** Nothing queued or in flight may be typed after Stop. This is enforced with
   session ids in three places (overlay, bridge, extension), so keep all three checks.
 * Allowed targets: `input[type=text|search|email|url]`, `textarea`, and `contenteditable`. Never type into password

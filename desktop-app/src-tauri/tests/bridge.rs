@@ -96,22 +96,36 @@ async fn types_only_while_active_and_for_current_session() {
     assert_eq!(welcome["active"], false);
     assert!(eventually(|| b.status().clients == 1).await);
 
-    assert_eq!(b.send_text(1, 0, "too early"), 0, "nothing sent before Start");
+    assert_eq!(b.send_text(1, 0, "too early", None), 0, "nothing sent before Start");
     b.set_state(true, 42);
     assert_eq!(
         recv(&mut ws).await.unwrap(),
         json!({ "type": "state", "active": true, "session": 42 })
     );
-    assert_eq!(b.send_text(42, 1, "hello world"), 1);
+    assert_eq!(b.send_text(42, 1, "hello world", None), 1);
     assert_eq!(
         recv(&mut ws).await.unwrap(),
         json!({ "type": "text", "session": 42, "seq": 1, "text": "hello world" })
     );
-    assert_eq!(b.send_text(41, 2, "stale session"), 0);
+    assert_eq!(b.send_text(41, 2, "stale session", Some("x")), 0);
+    // Live typing: the provisional tail is forwarded, even with no final text
+    // (an empty tail clears what was typed provisionally).
+    assert_eq!(b.send_text(42, 2, "", Some("still speaking")), 1);
+    assert_eq!(
+        recv(&mut ws).await.unwrap(),
+        json!({ "type": "text", "session": 42, "seq": 2, "text": "", "provisional": "still speaking" })
+    );
+    assert_eq!(b.send_text(42, 3, "", Some("")), 1);
+    assert_eq!(recv(&mut ws).await.unwrap()["provisional"], "");
+    assert_eq!(b.send_text(42, 4, "  ", None), 0, "nothing to type");
 
     b.set_state(false, 42);
     assert_eq!(recv(&mut ws).await.unwrap()["active"], false);
-    assert_eq!(b.send_text(42, 3, "after stop"), 0, "nothing sent after Stop");
+    assert_eq!(
+        b.send_text(42, 3, "after stop", Some("and more")),
+        0,
+        "nothing sent after Stop"
+    );
 
     // Ping/pong and ack forwarding.
     ws.send(Message::text(r#"{"type":"ping"}"#)).await.unwrap();

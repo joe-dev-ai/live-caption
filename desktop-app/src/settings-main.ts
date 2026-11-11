@@ -23,7 +23,14 @@ type BoolKey = { [K in keyof Settings]: Settings[K] extends boolean ? K : never 
 type NumKey = { [K in keyof Settings]: Settings[K] extends number ? K : never }[keyof Settings];
 type StrKey = { [K in keyof Settings]: Settings[K] extends string ? K : never }[keyof Settings];
 
-const BOOL_KEYS: BoolKey[] = ["useContextPrompt", "livePreview", "typeIntoChrome", "showDebug", "saveTranscript"];
+const BOOL_KEYS: BoolKey[] = [
+  "useContextPrompt",
+  "livePreview",
+  "typeIntoChrome",
+  "typePreview",
+  "showDebug",
+  "saveTranscript",
+];
 const RANGE_KEYS: NumKey[] = ["maxParallel", "fontSize", "bgOpacity"];
 const TEXT_KEYS: StrKey[] = ["jumpProcessNames", "transcriptDir"];
 const HOTKEY_KEYS: StrKey[] = ["hotkeyToggle", "hotkeyShowHide", "hotkeyTyping"];
@@ -89,6 +96,8 @@ function renderDerived(): void {
       b.setAttribute("aria-checked", String(settings[key] === b.dataset.value));
     });
   });
+  // Live typing needs the live preview.
+  $<HTMLInputElement>("typePreview").disabled = !settings.livePreview;
   const p = profileFor(settings.priority, settings.model);
   $("priority-hint").textContent =
     `${modelLabel(p.model)}, chunks ${p.minChunkSec}–${p.maxChunkSec} s, cut at pauses ≥ ${Math.round(p.pauseSec * 1000)} ms.`;

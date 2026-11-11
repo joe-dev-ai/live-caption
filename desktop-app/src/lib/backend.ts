@@ -14,8 +14,8 @@ export const backend = {
   stopCapture: () => invoke<void>("stop_capture"),
   setCaptioning: (active: boolean, typing: boolean, session: number) =>
     invoke<void>("set_captioning", { active, typing, session }),
-  bridgeSendText: (session: number, seq: number, text: string) =>
-    invoke<number>("bridge_send_text", { session, seq, text }),
+  bridgeSendText: (session: number, seq: number, text: string, provisional?: string) =>
+    invoke<number>("bridge_send_text", { session, seq, text, provisional: provisional ?? null }),
   bridgeStatus: () => invoke<BridgeStatus>("bridge_status"),
   jumpStatus: () => invoke<JumpStatus>("jump_status"),
   appInfo: () => invoke<AppInfo>("app_info"),

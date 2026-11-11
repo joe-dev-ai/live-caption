@@ -56,7 +56,7 @@
           <span class="hint">If Puter refuses a chosen model, its default model is used automatically.</span>
         </label>
         <label class="switch-row">
-          <span><span class="label">Live preview</span><span class="hint">Shows words in grey while they are still being spoken, then replaces them with the final text. Uses more Puter requests. Only final text is typed into Chrome.</span></span>
+          <span><span class="label">Live preview</span><span class="hint">Shows words in grey while they are still being spoken, then replaces them with the final text. Uses more Puter requests.</span></span>
           <input type="checkbox" class="switch" id="livePreview" />
         </label>
         <label class="switch-row">
@@ -74,6 +74,10 @@
         <label class="switch-row">
           <span><span class="label">Type captions into the focused Chrome text field</span><span class="hint">Independent of showing captions. Never presses Enter.</span></span>
           <input type="checkbox" class="switch" id="typeIntoChrome" />
+        </label>
+        <label class="switch-row">
+          <span><span class="label">Type the live preview immediately</span><span class="hint">Fastest: words are typed as soon as they are recognized and corrected in place when the final text differs. Only text the app typed itself, still right before the cursor, is ever corrected. Needs Live preview.</span></span>
+          <input type="checkbox" class="switch" id="typePreview" />
         </label>
         <div class="field">
           <span class="label">Pairing token</span>

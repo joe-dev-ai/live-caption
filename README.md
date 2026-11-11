@@ -112,9 +112,12 @@ Extension icon states:
 * Click **▶ Start** or press **Ctrl+Alt+Q** (from any app, including Chrome) to start.
 * As soon as someone speaks, **live preview** text appears in grey and grows while they talk. Within about 2–3 s it
   is replaced by the final, more accurate text in white. The newest line is at the bottom.
-* While captioning is running and **Type into Chrome** is on, each finished caption chunk is inserted at the caret
-  of the focused field in the active Chrome tab, with spaces added between chunks automatically. Click into a
-  chat box or document in Chrome and the text appears there. Enter is never pressed and nothing is submitted.
+* While captioning is running and **Type into Chrome** is on, captions are typed at the caret of the focused field
+  in the active Chrome tab, with spaces added automatically. Click into a chat box or document in Chrome and the text
+  appears there. With **Type the live preview immediately** (on by default), words are typed about as fast as the
+  grey preview shows them, then quietly corrected in place when the final text differs. Enter is never pressed and
+  nothing is submitted. Tip: let a sentence finish before you press Enter, because words typed just before the final
+  text arrives can still change.
 * Click **■ Stop** or press **Ctrl+Alt+Q** again. Typing stops at once, and any queued or in-flight text is
   discarded.
 * Clicking the overlay is designed not to take keyboard focus away from Chrome (see *Known limitations*). For
@@ -161,10 +164,10 @@ Changes save automatically and apply right away. They are stored in
 | Transcription | Language (sent explicitly; no auto-detection) | English |
 | | Priority: **Accuracy** (2–5 s chunks) / **Balanced** (1.5–4 s) / **Speed** (1–3 s) | Balanced |
 | | Model: **Auto** (Puter's default speech-to-text model, currently `gpt-transcribe`) or `gpt-transcribe`. If Puter refuses a chosen model, the default is used automatically. | Auto |
-| | Live preview: grey provisional text while speech is in progress (uses more Puter requests; only final text is typed into Chrome) | On |
+| | Live preview: grey provisional text while speech is in progress (uses more Puter requests) | On |
 | | Use recent text as context (sends the last 1–2 sentences as the prompt) | On |
 | | Parallel requests (1–4) | 3 |
-| Type into Chrome | On/off, pairing token (Copy / New token), local port | On, random token, 47821 |
+| Type into Chrome | On/off, **Type the live preview immediately** (fastest; corrected in place), pairing token (Copy / New token), local port | On, on, random token, 47821 |
 | Hotkeys | Start/Stop, Show/Hide, Typing on/off (click a field, press the keys; Backspace clears it) | see above |
 | Appearance | Font size, background opacity, debug info. The caption area keeps the whole session: scroll up to reread, and click **Latest** to jump back | 26 px, 60 %, off |
 | Transcript | Save a `.txt` file with timestamps (a new file each time you press Start); folder | Off, `Documents\Live Captions` |
@@ -205,7 +208,12 @@ delay (average and p90), the average speech→text delay, requests in flight, an
   the default and says so once; if a model rejects the `prompt` option, the app stops sending it.
 * **Live preview** (`pipeline.ts`): while speech is in progress, all audio that has no final text yet is transcribed
   about once a second (one request at a time) and shown in grey. When a final chunk arrives, the part of the preview
-  it covers is removed so words never appear twice. Previews are never typed into Chrome or saved.
+  it covers is removed so words never appear twice. Previews are never saved to the transcript.
+* **Live typing** (`typing.ts`, `content.js`): with **Type the live preview immediately** on, the preview minus its last
+  word (usually still being spoken) is typed into Chrome right away. Each update and each final result corrects that
+  provisional text in place: only the changed characters are replaced. The extension only edits text it typed itself,
+  and only while that text is still exactly what precedes the cursor. If you typed, moved the cursor or sent the
+  message, it leaves that text alone and types only the words that are new.
 * **Parallel and ordered** (`scheduler.ts`): sends up to 3–4 requests at once, numbers them in sequence, and always
   outputs in order. Each request has a 12 s timeout, is retried once, and is then skipped, so the stream never
   stalls.
@@ -269,7 +277,7 @@ Chrome typing without a Puter account or credits.
 ## 8. Developer tests
 
 ```bash
-# Front end: VAD/chunking, post-processing, ordered scheduler, WAV, WER, pipeline, Puter wrapper, caption view (46 tests)
+# Front end: VAD/chunking, post-processing, ordered scheduler, WAV, WER, pipeline, Puter wrapper, caption view, typing planner (51 tests)
 cd desktop-app
 npm test
 npm run typecheck
@@ -306,6 +314,9 @@ cargo run --example bridge_server -- 47821 TEST-TOKE-N123-4567
 * **Focus.** The overlay is a non-activating window, and the app also returns focus to the previous window if the
   overlay ever becomes the foreground window. Chrome may still flicker briefly on some systems. The hotkeys avoid
   this completely.
+* **Live typing corrects text after it appears.** Words typed from the preview can change a moment later when the
+  final text arrives. If you send a message mid-sentence, the remaining words go into the next message. Text typed
+  before you press Stop stays as it is, even if it was still provisional.
 * **Chrome typing can't reach every page.** Chrome doesn't allow extensions on `chrome://` pages, the Chrome Web
   Store, or the built-in PDF viewer. Some canvas-based editors (for example Google Docs' canvas mode) may not
   accept inserted text. Closed shadow roots can't be reached.

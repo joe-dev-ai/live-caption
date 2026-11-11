@@ -33,8 +33,16 @@ let retryMs = 1000;
 let retryTimer;
 /** @type {ReturnType<typeof setInterval> | undefined} */
 let pingTimer;
+/**
+ * @typedef {{ session: number, seq: number, text: string, provisional: string | null }} TypingJob
+ * `text` is newly final caption text; `provisional` the not-yet-final tail
+ * (live typing) that replaces the tail typed before, or null when unused.
+ */
+
 /** Insertions run one at a time, in arrival order. */
 let chain = Promise.resolve();
+/** Latest typing message received, so outdated preview-only updates can be skipped. */
+let newest = { session: 0, seq: 0 };
 /** @type {{result: string, at: number} | null} */
 let lastResult = null;
 
@@ -162,7 +170,14 @@ function onMessage(sock, data) {
       break;
     case "text": {
       if (!active || msg.session !== session) return;
-      const job = { session: msg.session, seq: msg.seq, text: String(msg.text || "") };
+      /** @type {TypingJob} */
+      const job = {
+        session: msg.session,
+        seq: Number(msg.seq) || 0,
+        text: String(msg.text || ""),
+        provisional: typeof msg.provisional === "string" ? msg.provisional : null,
+      };
+      newest = { session: job.session, seq: job.seq };
       chain = chain.then(() => typeText(sock, job)).catch(() => {});
       break;
     }
@@ -175,9 +190,12 @@ function onMessage(sock, data) {
 
 const isCurrent = (/** @type {number} */ s) => active && s === session;
 
-/** @param {WebSocket} sock @param {{session:number, seq:number, text:string}} job */
+/** @param {WebSocket} sock @param {TypingJob} job */
 async function typeText(sock, job) {
   if (!isCurrent(job.session)) return;
+  // A preview-only update that a newer message already replaces: skip it.
+  // Messages with final text are never skipped.
+  if (!job.text && newest.session === job.session && newest.seq > job.seq) return;
   const result = await insertIntoActiveTab(job);
   if (result === "skipped") return;
   lastResult = { result, at: Date.now() };
@@ -191,13 +209,13 @@ async function typeText(sock, job) {
 async function probeFrames(tabId) {
   const results = await chrome.scripting.executeScript({
     target: { tabId, allFrames: true },
-    func: () => /** @type {any} */ (globalThis).__liveCaptionTyper?.probe() ?? null,
+    func: () => /** @type {any} */ (globalThis).__liveCaptionTyperV2?.probe() ?? null,
   });
   return results.map((r) => ({ frameId: r.frameId, info: /** @type {any} */ (r.result) }));
 }
 
 /**
- * @param {{session:number, text:string}} job
+ * @param {TypingJob} job
  * @returns {Promise<string>}
  */
 async function insertIntoActiveTab(job) {
@@ -227,8 +245,9 @@ async function insertIntoActiveTab(job) {
   try {
     const [res] = await chrome.scripting.executeScript({
       target: { tabId, frameIds: [target.frameId] },
-      func: (text) => /** @type {any} */ (globalThis).__liveCaptionTyper?.insert(text) ?? "no_field",
-      args: [job.text],
+      func: (session, text, provisional) =>
+        /** @type {any} */ (globalThis).__liveCaptionTyperV2?.apply(session, text, provisional) ?? "no_field",
+      args: [job.session, job.text, job.provisional],
     });
     return String(res?.result ?? "error");
   } catch {

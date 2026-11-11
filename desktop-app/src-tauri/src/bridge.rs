@@ -11,7 +11,7 @@
 //! Protocol (JSON text frames):
 //!   ext -> app : hello{token,version} | ping | ack{session,seq,result,detail}
 //!   app -> ext : welcome{active,session} | auth_error{reason} | pong
-//!                | state{active,session} | text{session,seq,text}
+//!                | state{active,session} | text{session,seq,text,provisional?}
 
 use crate::settings::normalize_token;
 use futures_util::{SinkExt, StreamExt};
@@ -132,15 +132,21 @@ impl Bridge {
             .broadcast(json!({ "type": "state", "active": active, "session": session }));
     }
 
-    /// Forward a finalized caption chunk. Returns the number of clients it was
-    /// sent to (0 when typing is inactive or the session is stale).
-    pub fn send_text(&self, session: u64, seq: u64, text: &str) -> usize {
+    /// Forward text to type. `text` is newly finalized caption text;
+    /// `provisional` (live typing) is the complete not-yet-final tail that
+    /// should follow it, replacing the tail typed before. Returns the number
+    /// of clients it was sent to (0 when typing is inactive or the session is
+    /// stale, so nothing can be typed after Stop).
+    pub fn send_text(&self, session: u64, seq: u64, text: &str, provisional: Option<&str>) -> usize {
         let st = *self.inner.typing.lock().unwrap();
-        if !st.active || st.session != session || text.trim().is_empty() {
+        if !st.active || st.session != session || (text.trim().is_empty() && provisional.is_none()) {
             return 0;
         }
-        self.inner
-            .broadcast(json!({ "type": "text", "session": session, "seq": seq, "text": text }))
+        let mut msg = json!({ "type": "text", "session": session, "seq": seq, "text": text });
+        if let Some(p) = provisional {
+            msg["provisional"] = json!(p);
+        }
+        self.inner.broadcast(msg)
     }
 }
 

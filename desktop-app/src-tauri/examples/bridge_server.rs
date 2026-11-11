@@ -3,7 +3,8 @@
 //!
 //!   cargo run --example bridge_server -- 47821 TEST-TOKE-N123-4567
 //!
-//! Commands:  start <session> | stop | text <seq> <words…> | quit
+//! Commands:  start <session> | stop | text <seq> <words…>
+//!            | typing <seq> <final words>|<provisional words> | quit
 
 use live_caption_overlay_lib::bridge::Bridge;
 use std::io::BufRead;
@@ -34,7 +35,13 @@ fn main() {
             Some("text") => {
                 let seq: u64 = parts.next().and_then(|s| s.parse().ok()).unwrap_or(0);
                 let text = parts.next().unwrap_or("");
-                let n = bridge.send_text(session, seq, text);
+                let n = bridge.send_text(session, seq, text, None);
+                println!("{}", serde_json::json!({ "event": "sent", "seq": seq, "clients": n }));
+            }
+            Some("typing") => {
+                let seq: u64 = parts.next().and_then(|s| s.parse().ok()).unwrap_or(0);
+                let (text, provisional) = parts.next().unwrap_or("").split_once('|').unwrap_or(("", ""));
+                let n = bridge.send_text(session, seq, text, Some(provisional));
                 println!("{}", serde_json::json!({ "event": "sent", "seq": seq, "clients": n }));
             }
             Some("quit") => break,
