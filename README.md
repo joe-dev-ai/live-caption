@@ -173,7 +173,7 @@ Changes save automatically and apply right away. They are stored in
 | Hotkeys | Start/Stop, Show/Hide, Typing on/off (click a field, press the keys; Backspace clears it) | see above |
 | Appearance | Font size, background opacity, debug info. The caption area keeps the whole session: scroll up to reread, and click **Latest** to jump back | 26 px, 60 %, off |
 | Transcript | Save a `.txt` file with timestamps (a new file each time you press Start); folder | Off, `Documents\Live Captions` |
-| Puter account | Shows who is signed in; Sign out | — |
+| Puter account | Who is signed in, how much of this month's free allowance is used (bar, dollars left, about how many hours of captioning that covers at the current settings), and Sign out | — |
 
 **Debug info** adds a line to the overlay showing the model, average chunk length, API time, end-of-chunk→text
 delay (average and p90), the average speech→text delay, requests in flight, and how many chunks were skipped
@@ -283,7 +283,7 @@ Chrome typing without a Puter account or credits.
 ## 8. Developer tests
 
 ```bash
-# Front end: VAD/chunking, post-processing, ordered scheduler, WAV, WER, pipeline, Puter wrapper, caption view, typing planner, request limiter (58 tests)
+# Front end: VAD/chunking, post-processing, ordered scheduler, WAV, WER, pipeline, Puter wrapper, caption view, typing planner, request limiter, allowance (62 tests)
 cd desktop-app
 npm test
 npm run typecheck
@@ -305,9 +305,11 @@ cargo run --example bridge_server -- 47821 TEST-TOKE-N123-4567
   paid plan). Live preview shows the first words about 0.3 s plus Puter's response time after speech starts, and the final
   text follows within about 2–3 s. Turn on **Show debug info** to see Puter's response time ("API") on your
   connection. Live preview sends extra requests; turn it off in Settings to use fewer.
-* **Puter sign-in and usage.** You need a Puter account. Usage is billed to it under Puter's user-pays model, and
-  if your Puter credits or limits run out, captioning stops with a message. The app needs internet access
-  (`js.puter.com`, `api.puter.com`, `puter.com`).
+* **Puter sign-in and usage.** You need a Puter account. A free account is **never charged**: it has a monthly
+  allowance, and when that runs out captions pause (with a message) until it resets next month. Settings shows how
+  much is used, and the overlay warns once when less than 10% is left. Live preview sends about 3–4× more audio, so
+  turning it off makes the allowance last longer. A free account also allows at most 3 Puter requests at once,
+  which the app respects. The app needs internet access (`js.puter.com`, `api.puter.com`, `puter.com`).
 * **Accuracy depends on audio quality.** Jump Desktop's audio codec, background music, overlapping speakers, and
   very quiet audio all reduce accuracy. The energy-based VAD can mistake steady loud music for speech, in which case
   the model may transcribe lyrics or nothing.

@@ -1,12 +1,19 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { modelLabel, profileFor } from "../src/pipeline/profile.ts";
-import { classifyError, onModelFallback, transcribeWithPuter, warmUpPuter, type PuterApi } from "../src/pipeline/puter.ts";
+import {
+  classifyError,
+  getAllowance,
+  onModelFallback,
+  transcribeWithPuter,
+  warmUpPuter,
+  type PuterApi,
+} from "../src/pipeline/puter.ts";
 
 type Call = Record<string, unknown>;
 
 /** Install a fake `window.puter` whose speech2txt is `impl`; returns the recorded options. */
-function fakePuter(impl: (opts: Call) => Promise<unknown>, signedIn = true): Call[] {
+function fakePuter(impl: (opts: Call) => Promise<unknown>, signedIn = true, usage: unknown = {}): Call[] {
   const calls: Call[] = [];
   const puter = {
     ai: {
@@ -15,7 +22,13 @@ function fakePuter(impl: (opts: Call) => Promise<unknown>, signedIn = true): Cal
         return impl(opts ?? {});
       },
     },
-    auth: { signIn: async () => ({}), signOut: () => {}, isSignedIn: () => signedIn, getUser: async () => ({}) },
+    auth: {
+      signIn: async () => ({}),
+      signOut: () => {},
+      isSignedIn: () => signedIn,
+      getUser: async () => ({}),
+      getMonthlyUsage: async () => usage as { allowanceInfo?: { monthUsageAllowance?: unknown; remaining?: unknown } },
+    },
   } satisfies PuterApi;
   Object.defineProperty(globalThis, "window", { value: { puter }, configurable: true, writable: true });
   return calls;
@@ -135,4 +148,13 @@ test("warm-up sends one free test-mode request, and nothing when signed out", as
   const none = fakePuter(async () => ({ text: "sample" }), false);
   await warmUpPuter();
   assert.equal(none.length, 0);
+});
+
+test("reads this month's allowance from Puter", async () => {
+  fakePuter(async () => ({}), true, { allowanceInfo: { monthUsageAllowance: 50_000_000, remaining: 20_000_000 }, usage: {} });
+  assert.deepEqual(await getAllowance(), { allowance: 50_000_000, remaining: 20_000_000 });
+  fakePuter(async () => ({}), true, { usage: {} });
+  assert.equal(await getAllowance(), null, "missing numbers");
+  fakePuter(async () => ({}), false, { allowanceInfo: { monthUsageAllowance: 1, remaining: 1 } });
+  assert.equal(await getAllowance(), null, "signed out");
 });

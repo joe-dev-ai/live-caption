@@ -216,3 +216,24 @@ details.advanced summary {
   font-size: 12px;
   color: var(--md-on-surface-variant);
 }
+
+.usage {
+  display: grid;
+  gap: 6px;
+}
+.meter {
+  height: 8px;
+  border-radius: var(--radius-full);
+  background: var(--md-surface-container-high);
+  overflow: hidden;
+}
+.meter-fill {
+  height: 100%;
+  width: 0;
+  border-radius: var(--radius-full);
+  background: var(--md-primary);
+  transition: width 300ms;
+}
+.meter.low .meter-fill {
+  background: var(--warn);
+}

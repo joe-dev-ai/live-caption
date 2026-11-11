@@ -17,6 +17,7 @@ export interface PuterApi {
     signOut(): unknown;
     isSignedIn(): boolean;
     getUser(): Promise<PuterUser>;
+    getMonthlyUsage(): Promise<{ allowanceInfo?: { monthUsageAllowance?: unknown; remaining?: unknown } }>;
   };
 }
 
@@ -165,6 +166,20 @@ let modelFallbackListener: ((model: string, reason: string) => void) | null = nu
 /** Be told (once per model) when a chosen model is refused and the default is used. */
 export function onModelFallback(listener: ((model: string, reason: string) => void) | null): void {
   modelFallbackListener = listener;
+}
+
+/** This month's allowance and what is left of it (micro-cents), or null if unavailable. */
+export async function getAllowance(): Promise<{ allowance: number; remaining: number } | null> {
+  const puter = window.puter;
+  if (!puter?.auth.isSignedIn()) return null;
+  try {
+    const info = (await puter.auth.getMonthlyUsage())?.allowanceInfo;
+    const allowance = Number(info?.monthUsageAllowance);
+    const remaining = Number(info?.remaining);
+    return Number.isFinite(allowance) && Number.isFinite(remaining) ? { allowance, remaining } : null;
+  } catch {
+    return null;
+  }
 }
 
 /**

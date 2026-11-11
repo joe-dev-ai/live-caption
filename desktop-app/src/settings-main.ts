@@ -2,6 +2,7 @@
 // live; the Rust side persists them and notifies every window.
 
 import "./styles/settings.css";
+import { describeAllowance, summarizeAllowance } from "./lib/allowance.ts";
 import { backend, broadcast, errorText, on } from "./lib/backend.ts";
 import type { BridgeStatus, JumpStatus, PuterStatus, Settings } from "./lib/types.ts";
 import { modelLabel, profileFor } from "./pipeline/profile.ts";
@@ -131,13 +132,24 @@ function renderBridge(b: BridgeStatus): void {
   }
 }
 
+let puterStatus: PuterStatus = { loaded: false, signedIn: false };
+
 function renderPuter(p: PuterStatus): void {
+  puterStatus = p;
   $("puter-status").textContent = !p.loaded
     ? p.error ?? "Puter.js is loading…"
     : p.signedIn
       ? `Signed in${p.username ? ` as ${p.username}` : ""}.`
       : "Not signed in — use the Sign in button on the caption overlay.";
   $<HTMLButtonElement>("puter-signout").disabled = !p.signedIn;
+  const usage = $("puter-usage");
+  usage.hidden = !p.signedIn || !p.allowance;
+  if (usage.hidden || !p.allowance) return;
+  const summary = summarizeAllowance(p.allowance, settings.livePreview);
+  $("usage-fill").style.width = `${summary.usedPercent.toFixed(1)}%`;
+  $("usage-meter").classList.toggle("low", summary.low);
+  $("usage-meter").setAttribute("aria-valuenow", String(Math.round(summary.usedPercent)));
+  $("usage-text").textContent = describeAllowance(summary);
 }
 
 /** Convert a keydown into an accelerator string such as "Ctrl+Alt+Q". */
@@ -271,6 +283,7 @@ async function main(): Promise<void> {
     on<Settings>("settings-changed", (next) => {
       settings = next;
       render();
+      renderPuter(puterStatus); // the estimate depends on Live preview
     }),
     on<BridgeStatus>("bridge-status", renderBridge),
     on<JumpStatus>("jump-status", renderJump),

@@ -83,4 +83,6 @@ export interface PuterStatus {
   signedIn: boolean;
   username?: string | null;
   error?: string | null;
+  /** Monthly allowance and what is left of it, in micro-cents. */
+  allowance?: { allowance: number; remaining: number } | null;
 }

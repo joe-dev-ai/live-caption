@@ -133,10 +133,14 @@
       <section class="card">
         <h2>Puter account</h2>
         <p id="puter-status" class="hint"></p>
+        <div class="usage" id="puter-usage" hidden>
+          <div class="meter" role="progressbar" aria-label="Monthly allowance used" aria-valuemin="0" aria-valuemax="100" id="usage-meter"><div class="meter-fill" id="usage-fill"></div></div>
+          <p class="hint" id="usage-text"></p>
+        </div>
         <div class="row">
           <button type="button" class="btn-outlined" id="puter-signout"></button>
         </div>
-        <p class="hint">Speech-to-text uses Puter's "user-pays" model: you sign in with your own Puter account (from the caption overlay) and usage is billed to it.</p>
+        <p class="hint">Speech-to-text uses Puter's "user-pays" model: you sign in with your own Puter account (from the caption overlay). A free account is never charged. If its monthly allowance runs out, captions pause until it resets next month. Live preview sends more audio, so turning it off makes the allowance last longer.</p>
       </section>
       <p class="footer" id="version"></p>
     </main>

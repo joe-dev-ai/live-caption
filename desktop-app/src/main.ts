@@ -8,7 +8,15 @@ import type { AckResult, BridgeAck, BridgeStatus, CaptureStatus, JumpStatus, Put
 import { CaptionPipeline, type PipelineConfig, type PipelineStats } from "./pipeline/pipeline.ts";
 import { modelLabel, profileFor } from "./pipeline/profile.ts";
 import { fakeTranscribe } from "./pipeline/fake-stt.ts";
-import { classifyError, loadPuter, onModelFallback, transcribeWithPuter, warmUpPuter } from "./pipeline/puter.ts";
+import { describeAllowance, summarizeAllowance } from "./lib/allowance.ts";
+import {
+  classifyError,
+  getAllowance,
+  loadPuter,
+  onModelFallback,
+  transcribeWithPuter,
+  warmUpPuter,
+} from "./pipeline/puter.ts";
 import { TypingPlanner } from "./pipeline/typing.ts";
 import { wordErrorRate } from "./pipeline/wer.ts";
 import { CaptionView } from "./ui/captions.ts";
@@ -107,7 +115,11 @@ function createPipeline(s: Settings): CaptionPipeline {
         showSignInBanner("Your Puter session expired — sign in again to continue.");
       } else if (err.kind === "quota") {
         stop();
-        setBanner({ text: `Puter usage limit reached: ${err.message}`, error: true });
+        setBanner({
+          text: "Your free Puter allowance for this month is used up. You are not charged; captions resume when it resets next month.",
+          error: true,
+        });
+        void refreshAllowance();
       } else if (err.kind === "rate_limit") {
         flash("Puter's request limit was reached — skipped a chunk");
       } else {
@@ -191,6 +203,7 @@ function stop(): void {
   typing.reset();
   void backend.stopCapture();
   render();
+  void refreshAllowance();
 }
 
 function toggle(fromClick: boolean): void {
@@ -229,6 +242,28 @@ async function refreshPuter(): Promise<void> {
   }
   publishPuter();
   render();
+  await refreshAllowance();
+}
+
+/** How often the allowance is re-read while captioning. */
+const ALLOWANCE_REFRESH_MS = 5 * 60 * 1000;
+let allowanceReadAt = 0;
+let lowAllowanceWarned = false;
+
+/** Read this month's Puter allowance, share it with Settings, and warn once when it runs low. */
+async function refreshAllowance(): Promise<void> {
+  if (state.fakeStt) return;
+  allowanceReadAt = Date.now();
+  state.puter.allowance = await getAllowance();
+  publishPuter();
+  const a = state.puter.allowance;
+  if (!a || lowAllowanceWarned || !state.settings) return;
+  const summary = summarizeAllowance(a, state.settings.livePreview);
+  if (!summary.low) return;
+  lowAllowanceWarned = true;
+  setBanner({
+    text: `Your free Puter allowance is almost used up. ${describeAllowance(summary)} You are never charged; captions pause when it runs out and resume next month. Turning off Live preview makes it last about 3–4× longer.`,
+  });
 }
 
 function publishPuter(): void {
@@ -259,7 +294,7 @@ function signIn(): Promise<boolean> {
     });
 }
 
-function showSignInBanner(text = "Sign in to Puter to start captions (free account; usage is billed to your Puter account)."): void {
+function showSignInBanner(text = "Sign in to Puter to start captions (a free account is enough and is never charged)."): void {
   setBanner({ text, action: { label: "Sign in", run: () => void signIn() } });
 }
 
@@ -508,6 +543,7 @@ function wireUi(): void {
   setInterval(() => {
     if (!state.active) return;
     maybeReportTest();
+    if (Date.now() - allowanceReadAt > ALLOWANCE_REFRESH_MS) void refreshAllowance();
     render();
   }, 1000);
 }
@@ -553,7 +589,10 @@ async function main(): Promise<void> {
       render();
     }),
     on("toggle-captioning", () => toggle(false)),
-    on("puter-status-request", () => publishPuter()),
+    on("puter-status-request", () => {
+      publishPuter();
+      void refreshAllowance(); // fresh numbers whenever Settings opens
+    }),
     on("puter-sign-out", async () => {
       stop();
       await window.puter?.auth.signOut();

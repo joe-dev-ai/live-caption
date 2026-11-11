@@ -40,6 +40,9 @@ pipeline, UI, or extension.
   * Never add a local speech-recognition model or another STT provider.
   * Input is WAV chunks: Puter has no live streaming.
   * Sign-in uses Puter's "user-pays" popup flow and must stay clear and explicit in the UI.
+  * The owner uses a **free** Puter account and must never pay: never buy credits or upgrade, and keep the extra
+    usage of features visible. Settings shows the monthly allowance (`puter.auth.getMonthlyUsage()`), and the
+    overlay warns once when less than 10% is left.
 * **Models:** use Puter's default speech-to-text model (currently `gpt-transcribe`) by sending **no** `model`
   option when Model is "Auto". Puter retired the `gpt-4o-transcribe` / `gpt-4o-mini-transcribe` / `whisper-1` models
   the app first used. An explicitly chosen model that Puter refuses must fall back to the default automatically,
