@@ -25,7 +25,7 @@ declare global {
 
 export const PUTER_SRC = "https://js.puter.com/v2/";
 
-export type SttErrorKind = "auth" | "quota" | "bad_request" | "network" | "unknown";
+export type SttErrorKind = "auth" | "quota" | "model" | "bad_request" | "network" | "unknown";
 
 export class SttError extends Error {
   kind: SttErrorKind;
@@ -79,6 +79,18 @@ function describe(e: unknown): string {
   }
 }
 
+/** Machine-readable error code from Puter's error shapes, if any. */
+function errorCode(e: unknown): string | undefined {
+  if (!e || typeof e !== "object") return undefined;
+  const o = e as Record<string, unknown>;
+  const inner = o.error && typeof o.error === "object" ? (o.error as Record<string, unknown>) : undefined;
+  const code = inner?.code ?? o.code ?? (typeof o.error === "string" ? o.error : undefined);
+  return typeof code === "string" && code ? code : undefined;
+}
+
+const MODEL_ERROR =
+  /model[ _-]?(not[ _-]?found|not[ _-]?supported|unavailable|not[ _-]?allowed|deprecated|invalid)|(unknown|invalid|unsupported|retired|deprecated) model|no such model/i;
+
 /** Map Puter's various error shapes onto a small set of kinds. */
 export function classifyError(e: unknown): SttError {
   if (e instanceof SttError) return e;
@@ -89,9 +101,13 @@ export function classifyError(e: unknown): SttError {
       return describe(e);
     }
   })();
-  const msg = describe(e);
+  const code = errorCode(e);
+  const text = describe(e);
+  // Show the code too: a bare message such as a model id says little on its own.
+  const msg = code && !text.includes(code) ? `${text} (${code})` : text;
   if (/insufficient|funds|usage.?limit|quota|credits|402|payment/i.test(raw)) return new SttError("quota", msg);
   if (/auth|sign.?in|signed.?in|token|401|403|unauthori[sz]ed|forbidden|session/i.test(raw)) return new SttError("auth", msg);
+  if (MODEL_ERROR.test(raw)) return new SttError("model", msg);
   if (/bad_request|400|invalid|unsupported/i.test(raw)) return new SttError("bad_request", msg);
   if (/network|fetch|failed to fetch|timeout|timed out|ECONN|offline|5\d\d/i.test(raw)) return new SttError("network", msg);
   return new SttError("unknown", msg);
@@ -112,6 +128,7 @@ export function extractText(result: unknown): string {
 }
 
 export interface TranscribeOptions {
+  /** Model id, or "" for Puter's default model. */
   model: string;
   language: string;
   prompt?: string;
@@ -119,22 +136,42 @@ export interface TranscribeOptions {
 
 /** Whether the provider rejected the `prompt` option; then we stop sending it. */
 let promptUnsupported = false;
+/** Models Puter refused in this run; requests use Puter's default instead. */
+const rejectedModels = new Set<string>();
+let modelFallbackListener: ((model: string, reason: string) => void) | null = null;
+
+/** Be told (once per model) when a chosen model is refused and the default is used. */
+export function onModelFallback(listener: ((model: string, reason: string) => void) | null): void {
+  modelFallbackListener = listener;
+}
 
 export async function transcribeWithPuter(wav: Blob, o: TranscribeOptions): Promise<string> {
   const puter = window.puter;
   if (!puter) throw new SttError("network", "Puter.js is not loaded");
-  const options: Record<string, unknown> = { model: o.model, language: o.language };
+  const options: Record<string, unknown> = { language: o.language };
+  if (o.model && !rejectedModels.has(o.model)) options.model = o.model;
   if (o.prompt && !promptUnsupported) options.prompt = o.prompt;
-  try {
-    return extractText(await puter.ai.speech2txt(wav, options));
-  } catch (e) {
-    const err = classifyError(e);
-    // Context prompts are optional: if the model refuses them, retry without.
-    if (options.prompt && err.kind === "bad_request" && /prompt/i.test(err.message)) {
-      promptUnsupported = true;
-      delete options.prompt;
-      return extractText(await puter.ai.speech2txt(wav, options));
+  // Optional settings that Puter refuses are dropped and the request is
+  // retried; every retry removes one option, so this loop always ends.
+  for (;;) {
+    try {
+      return extractText(await puter.ai.speech2txt(wav, { ...options }));
+    } catch (e) {
+      const err = classifyError(e);
+      const model = typeof options.model === "string" ? options.model : "";
+      const usageProblem = err.kind === "quota" || err.kind === "auth" || err.kind === "network";
+      if (model && !usageProblem && (err.kind === "model" || err.message.includes(model))) {
+        rejectedModels.add(model);
+        modelFallbackListener?.(model, err.message);
+        delete options.model;
+        continue;
+      }
+      if (options.prompt && err.kind === "bad_request" && /prompt/i.test(err.message)) {
+        promptUnsupported = true;
+        delete options.prompt;
+        continue;
+      }
+      throw err;
     }
-    throw err;
   }
 }

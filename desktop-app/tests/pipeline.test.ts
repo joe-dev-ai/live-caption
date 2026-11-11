@@ -16,7 +16,7 @@ test("end-to-end: chunks are transcribed in parallel and emitted in order", asyn
     async (wav, opts) => {
       const n = ++call;
       prompts.push(opts.prompt);
-      assert.equal(opts.model, "gpt-4o-transcribe");
+      assert.equal(opts.model, "", "Auto sends no model so Puter uses its default");
       assert.equal(opts.language, "en");
       assert.equal(wav.type, "audio/wav");
       await sleep(n === 1 ? 60 : 5); // first request is slowest

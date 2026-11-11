@@ -6,9 +6,9 @@ import { getCurrentWindow } from "@tauri-apps/api/window";
 import { backend, broadcast, errorText, newAudioChannel, on } from "./lib/backend.ts";
 import type { AckResult, BridgeAck, BridgeStatus, CaptureStatus, JumpStatus, PuterStatus, Settings } from "./lib/types.ts";
 import { CaptionPipeline, type PipelineConfig, type PipelineStats } from "./pipeline/pipeline.ts";
-import { profileFor } from "./pipeline/profile.ts";
+import { modelLabel, profileFor } from "./pipeline/profile.ts";
 import { fakeTranscribe } from "./pipeline/fake-stt.ts";
-import { classifyError, loadPuter, transcribeWithPuter } from "./pipeline/puter.ts";
+import { classifyError, loadPuter, onModelFallback, transcribeWithPuter } from "./pipeline/puter.ts";
 import { wordErrorRate } from "./pipeline/wer.ts";
 import { icon } from "./ui/icons.ts";
 
@@ -376,10 +376,10 @@ function renderDebug(): void {
   const sec = (ms: number) => (ms / 1000).toFixed(2) + " s";
   const prof = state.settings ? profileFor(state.settings.priority, state.settings.model) : null;
   ui.debug.textContent = st && st.chunks
-    ? `${prof?.model} · chunk ${st.avgChunkSec.toFixed(1)} s · API ${sec(st.avgApiMs)} · end→text ${sec(st.avgEndToTextMs)} ` +
+    ? `${modelLabel(prof?.model ?? "")} · chunk ${st.avgChunkSec.toFixed(1)} s · API ${sec(st.avgApiMs)} · end→text ${sec(st.avgEndToTextMs)} ` +
       `(p90 ${sec(st.p90EndToTextMs)}) · avg speech→text ${sec(st.avgWordDelayMs)} · in-flight ${st.inFlight} · ` +
       `chunks ${st.chunks} · silent skipped ${st.skippedSilent} · filtered ${st.filtered} · failed ${st.failed}`
-    : `${prof?.model ?? ""} · debug: waiting for speech…`;
+    : `${modelLabel(prof?.model ?? "")} · debug: waiting for speech…`;
 }
 
 function setBanner(b: Banner): void {
@@ -498,6 +498,9 @@ function wireUi(): void {
 
 async function main(): Promise<void> {
   wireUi();
+  onModelFallback((model) =>
+    flash(`Model "${model}" isn't available on Puter, so Puter's default model is used instead.`, 8000),
+  );
   const [settings, info, bridge, jump] = await Promise.all([
     backend.getSettings(),
     backend.appInfo(),

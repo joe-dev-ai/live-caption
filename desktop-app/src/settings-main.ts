@@ -4,7 +4,7 @@
 import "./styles/settings.css";
 import { backend, broadcast, errorText, on } from "./lib/backend.ts";
 import type { BridgeStatus, JumpStatus, PuterStatus, Settings } from "./lib/types.ts";
-import { profileFor } from "./pipeline/profile.ts";
+import { modelLabel, profileFor } from "./pipeline/profile.ts";
 import { icon } from "./ui/icons.ts";
 
 const LANGUAGES: [string, string][] = [
@@ -82,7 +82,7 @@ function renderDerived(): void {
   });
   const p = profileFor(settings.priority, settings.model);
   $("priority-hint").textContent =
-    `${p.model}, chunks ${p.minChunkSec}–${p.maxChunkSec} s, cut at pauses ≥ ${Math.round(p.pauseSec * 1000)} ms.`;
+    `${modelLabel(p.model)}, chunks ${p.minChunkSec}–${p.maxChunkSec} s, cut at pauses ≥ ${Math.round(p.pauseSec * 1000)} ms.`;
 }
 
 function renderJump(j: JumpStatus): void {

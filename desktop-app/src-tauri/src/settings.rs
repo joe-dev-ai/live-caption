@@ -57,6 +57,10 @@ pub struct Settings {
 
 pub const DEFAULT_JUMP_NAMES: &str = "JumpDesktop.exe, JumpClient.exe, JumpWinClient.exe";
 
+/// Models earlier versions offered that Puter no longer lists. Saved settings
+/// that still name one switch to "auto" (Puter's default model).
+const RETIRED_MODELS: [&str; 3] = ["gpt-4o-transcribe", "gpt-4o-mini-transcribe", "whisper-1"];
+
 impl Default for Settings {
     fn default() -> Self {
         Self {
@@ -97,7 +101,8 @@ impl Settings {
         if self.language.is_empty() {
             self.language = "en".into();
         }
-        if self.model.trim().is_empty() {
+        self.model = self.model.trim().to_string();
+        if self.model.is_empty() || RETIRED_MODELS.contains(&self.model.as_str()) {
             self.model = "auto".into();
         }
         if self.jump_process_names.trim().is_empty() {
@@ -178,6 +183,24 @@ mod tests {
         let t = generate_token();
         assert_eq!(t.len(), 19);
         assert_eq!(normalize_token(&t.to_lowercase().replace('-', " ")), t);
+    }
+
+    #[test]
+    fn retired_models_switch_to_auto() {
+        for old in RETIRED_MODELS {
+            let s = Settings {
+                model: old.into(),
+                ..Default::default()
+            }
+            .sanitized();
+            assert_eq!(s.model, "auto");
+        }
+        let kept = Settings {
+            model: " gpt-transcribe ".into(),
+            ..Default::default()
+        }
+        .sanitized();
+        assert_eq!(kept.model, "gpt-transcribe");
     }
 
     #[test]

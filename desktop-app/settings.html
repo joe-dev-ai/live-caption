@@ -50,11 +50,10 @@
         <label class="field">
           <span class="label">Model</span>
           <select id="model">
-            <option value="auto">Auto (from priority)</option>
-            <option value="gpt-4o-transcribe">gpt-4o-transcribe — highest accuracy</option>
-            <option value="gpt-4o-mini-transcribe">gpt-4o-mini-transcribe — faster</option>
-            <option value="whisper-1">whisper-1</option>
+            <option value="auto">Auto — Puter's default model (recommended)</option>
+            <option value="gpt-transcribe">gpt-transcribe</option>
           </select>
+          <span class="hint">If Puter refuses a chosen model, its default model is used automatically.</span>
         </label>
         <label class="switch-row">
           <span><span class="label">Use recent text as context</span><span class="hint">Keeps names and terms consistent between chunks.</span></span>
