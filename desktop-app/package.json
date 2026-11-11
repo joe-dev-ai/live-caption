@@ -1,0 +1,22 @@
+{
+  "name": "live-caption-overlay",
+  "private": true,
+  "version": "1.0.0",
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "build": "tsc && vite build",
+    "typecheck": "tsc && tsc -p tsconfig.test.json",
+    "test": "node --test tests/*.test.ts",
+    "tauri": "tauri"
+  },
+  "dependencies": {
+    "@tauri-apps/api": "^2.12.4"
+  },
+  "devDependencies": {
+    "@tauri-apps/cli": "^2.12.4",
+    "@types/node": "^22.20.5",
+    "typescript": "~6.0.3",
+    "vite": "^8.0.16"
+  }
+}

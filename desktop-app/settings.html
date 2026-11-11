@@ -1,0 +1,133 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Settings — Live Caption Overlay</title>
+    <script type="module" src="/src/settings-main.ts"></script>
+  </head>
+  <body>
+    <header class="appbar">
+      <h1>Settings</h1>
+      <span class="save-state" id="save-state" aria-live="polite"></span>
+    </header>
+    <main class="content">
+      <section class="card">
+        <h2>Audio capture</h2>
+        <div class="field">
+          <span class="label">Capture mode</span>
+          <div class="segmented" role="radiogroup" data-key="captureMode">
+            <button type="button" data-value="jumpDesktop">Jump Desktop only</button>
+            <button type="button" data-value="system">All system audio</button>
+          </div>
+          <p class="hint" id="jump-status"></p>
+        </div>
+        <details class="advanced">
+          <summary>Advanced</summary>
+          <label class="field">
+            <span class="label">Jump Desktop process names</span>
+            <input type="text" id="jumpProcessNames" spellcheck="false" />
+            <span class="hint">Comma-separated executable names (check Task Manager → Details if Jump Desktop is not detected).</span>
+          </label>
+        </details>
+      </section>
+
+      <section class="card">
+        <h2>Transcription</h2>
+        <label class="field">
+          <span class="label">Language</span>
+          <select id="language"></select>
+        </label>
+        <div class="field">
+          <span class="label">Priority</span>
+          <div class="segmented" role="radiogroup" data-key="priority">
+            <button type="button" data-value="accuracy">Accuracy</button>
+            <button type="button" data-value="balanced">Balanced</button>
+            <button type="button" data-value="speed">Speed</button>
+          </div>
+          <p class="hint" id="priority-hint"></p>
+        </div>
+        <label class="field">
+          <span class="label">Model</span>
+          <select id="model">
+            <option value="auto">Auto (from priority)</option>
+            <option value="gpt-4o-transcribe">gpt-4o-transcribe — highest accuracy</option>
+            <option value="gpt-4o-mini-transcribe">gpt-4o-mini-transcribe — faster</option>
+            <option value="whisper-1">whisper-1</option>
+          </select>
+        </label>
+        <label class="switch-row">
+          <span><span class="label">Use recent text as context</span><span class="hint">Keeps names and terms consistent between chunks.</span></span>
+          <input type="checkbox" class="switch" id="useContextPrompt" />
+        </label>
+        <label class="field">
+          <span class="label">Parallel requests: <output id="maxParallel-out"></output></span>
+          <input type="range" id="maxParallel" min="1" max="4" step="1" />
+        </label>
+      </section>
+
+      <section class="card">
+        <h2>Type into Chrome</h2>
+        <label class="switch-row">
+          <span><span class="label">Type captions into the focused Chrome text field</span><span class="hint">Independent of showing captions. Never presses Enter.</span></span>
+          <input type="checkbox" class="switch" id="typeIntoChrome" />
+        </label>
+        <div class="field">
+          <span class="label">Pairing token</span>
+          <div class="token-row">
+            <input type="text" id="pairingToken" readonly spellcheck="false" />
+            <button type="button" class="btn-tonal" id="copy-token"></button>
+            <button type="button" class="btn-text" id="regen-token"></button>
+          </div>
+          <span class="hint">Paste this token into the extension popup once (chrome://extensions → Live Caption Typer).</span>
+        </div>
+        <label class="field narrow">
+          <span class="label">Local port</span>
+          <input type="number" id="bridgePort" min="1024" max="65535" />
+        </label>
+        <p class="hint" id="bridge-status"></p>
+      </section>
+
+      <section class="card">
+        <h2>Global hotkeys</h2>
+        <p class="hint">Click a field, then press the key combination. Backspace clears it.</p>
+        <label class="field"><span class="label">Start / Stop captioning</span><input type="text" class="hotkey" id="hotkeyToggle" readonly /></label>
+        <label class="field"><span class="label">Show / Hide overlay</span><input type="text" class="hotkey" id="hotkeyShowHide" readonly /></label>
+        <label class="field"><span class="label">Typing into Chrome on/off</span><input type="text" class="hotkey" id="hotkeyTyping" readonly /></label>
+      </section>
+
+      <section class="card">
+        <h2>Appearance</h2>
+        <label class="field"><span class="label">Font size: <output id="fontSize-out"></output></span><input type="range" id="fontSize" min="14" max="56" step="1" /></label>
+        <label class="field"><span class="label">Background opacity: <output id="bgOpacity-out"></output></span><input type="range" id="bgOpacity" min="0" max="1" step="0.05" /></label>
+        <label class="field"><span class="label">Caption lines: <output id="captionLines-out"></output></span><input type="range" id="captionLines" min="1" max="8" step="1" /></label>
+        <label class="switch-row">
+          <span><span class="label">Show debug info</span><span class="hint">Average chunk length, API time and speech-to-text delay.</span></span>
+          <input type="checkbox" class="switch" id="showDebug" />
+        </label>
+      </section>
+
+      <section class="card">
+        <h2>Transcript</h2>
+        <label class="switch-row">
+          <span><span class="label">Save transcript to a .txt file</span><span class="hint">One timestamped line per caption; a new file for every Start.</span></span>
+          <input type="checkbox" class="switch" id="saveTranscript" />
+        </label>
+        <label class="field">
+          <span class="label">Folder</span>
+          <input type="text" id="transcriptDir" placeholder="Documents\Live Captions" spellcheck="false" />
+        </label>
+      </section>
+
+      <section class="card">
+        <h2>Puter account</h2>
+        <p id="puter-status" class="hint"></p>
+        <div class="row">
+          <button type="button" class="btn-outlined" id="puter-signout"></button>
+        </div>
+        <p class="hint">Speech-to-text uses Puter's "user-pays" model: you sign in with your own Puter account (from the caption overlay) and usage is billed to it.</p>
+      </section>
+      <p class="footer" id="version"></p>
+    </main>
+  </body>
+</html>

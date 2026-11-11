@@ -1,0 +1,47 @@
+[package]
+name = "live-caption-overlay"
+version = "1.0.0"
+description = "Live caption overlay for Jump Desktop audio with Chrome auto-typing"
+authors = ["Live Caption Overlay"]
+edition = "2021"
+rust-version = "1.80"
+
+[lib]
+name = "live_caption_overlay_lib"
+crate-type = ["staticlib", "cdylib", "rlib"]
+
+[build-dependencies]
+tauri-build = { version = "2", features = [] }
+
+[dependencies]
+tauri = { version = "2", features = ["tray-icon", "image-png"] }
+tauri-plugin-global-shortcut = "2"
+tauri-plugin-window-state = "2"
+tauri-plugin-single-instance = "2"
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+tokio = { version = "1", features = ["net", "sync", "time", "macros", "rt"] }
+tokio-tungstenite = { version = "0.30", default-features = false, features = ["handshake"] }
+futures-util = { version = "0.3", default-features = false, features = ["sink", "std"] }
+getrandom = "0.3"
+
+[target.'cfg(windows)'.dependencies]
+wasapi = "0.27"
+windows = { version = "0.62", features = [
+  "Win32_Foundation",
+  "Win32_System_Diagnostics_ToolHelp",
+  "Win32_System_Threading",
+  "Win32_UI_Accessibility",
+  "Win32_UI_Input_KeyboardAndMouse",
+  "Win32_UI_WindowsAndMessaging",
+] }
+
+[profile.release]
+codegen-units = 1
+lto = true
+opt-level = "s"
+panic = "abort"
+strip = true
+
+[dev-dependencies]
+tokio-tungstenite = { version = "0.30", default-features = false, features = ["connect", "handshake"] }

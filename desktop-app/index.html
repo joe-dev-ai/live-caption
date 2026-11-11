@@ -1,0 +1,43 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Live Caption Overlay</title>
+    <script type="module" src="/src/main.ts"></script>
+  </head>
+  <body>
+    <div id="overlay" class="overlay">
+      <header class="topbar" data-tauri-drag-region>
+        <div class="status" id="status" data-tauri-drag-region>
+          <span class="dot" data-tauri-drag-region></span>
+          <span class="status-text" id="status-text" data-tauri-drag-region>Idle</span>
+        </div>
+        <div class="chips" data-tauri-drag-region>
+          <button class="chip" id="chip-source" type="button" tabindex="-1" title="Audio source"></button>
+          <button class="chip" id="chip-chrome" type="button" tabindex="-1" title="Click to turn typing into Chrome on/off"></button>
+        </div>
+        <div class="actions">
+          <button class="btn-filled" id="btn-toggle" type="button" tabindex="-1" title="Start / Stop captioning"></button>
+          <button class="btn-icon" id="btn-settings" type="button" tabindex="-1" title="Settings"></button>
+          <button class="btn-icon" id="btn-hide" type="button" tabindex="-1" title="Minimize to tray"></button>
+        </div>
+      </header>
+      <div class="banner" id="banner" hidden>
+        <span class="banner-text" id="banner-text"></span>
+        <button class="btn-tonal" id="banner-action" type="button" tabindex="-1"></button>
+        <button class="btn-icon small" id="banner-close" type="button" tabindex="-1" title="Dismiss"></button>
+      </div>
+      <main class="captions" id="captions" aria-live="polite"></main>
+      <footer class="debug" id="debug" hidden></footer>
+      <div class="resize" data-dir="North"></div>
+      <div class="resize" data-dir="South"></div>
+      <div class="resize" data-dir="East"></div>
+      <div class="resize" data-dir="West"></div>
+      <div class="resize" data-dir="NorthEast"></div>
+      <div class="resize" data-dir="NorthWest"></div>
+      <div class="resize" data-dir="SouthEast"></div>
+      <div class="resize" data-dir="SouthWest"></div>
+    </div>
+  </body>
+</html>

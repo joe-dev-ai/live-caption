@@ -1,0 +1,124 @@
+/* Material 3 inspired tokens (dark scheme) shared by both windows. */
+:root {
+  --md-primary: #a8c7fa;
+  --md-on-primary: #062e6f;
+  --md-primary-container: #0842a0;
+  --md-on-primary-container: #d3e3fd;
+  --md-secondary-container: #3c4a5e;
+  --md-on-secondary-container: #d7e3f8;
+  --md-error: #f2b8b5;
+  --md-error-container: #8c1d18;
+  --md-on-error-container: #f9dedc;
+  --md-surface: #131316;
+  --md-surface-container: #1f1f23;
+  --md-surface-container-high: #2a2a2e;
+  --md-on-surface: #e5e2e6;
+  --md-on-surface-variant: #c5c6d0;
+  --md-outline: #8f9099;
+  --md-outline-variant: #45464f;
+  --ok: #7fd88f;
+  --warn: #ffcc66;
+  --busy: #c3a6ff;
+  --live: #ff6b6b;
+  --radius-full: 999px;
+  font-family: "Segoe UI Variable Text", "Segoe UI", Roboto, system-ui, -apple-system, sans-serif;
+  font-size: 14px;
+  color: var(--md-on-surface);
+  -webkit-font-smoothing: antialiased;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+[hidden] {
+  display: none !important;
+}
+
+.icon {
+  width: 1.25em;
+  height: 1.25em;
+  fill: currentColor;
+  flex: none;
+  display: block;
+}
+
+button {
+  font: inherit;
+  color: inherit;
+  border: 0;
+  background: none;
+  cursor: pointer;
+  position: relative;
+  overflow: hidden;
+  -webkit-tap-highlight-color: transparent;
+}
+
+/* State layer: hover 8%, press 12% (Material 3). */
+button::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background: currentColor;
+  opacity: 0;
+  transition: opacity 120ms;
+  pointer-events: none;
+}
+button:hover::after {
+  opacity: 0.08;
+}
+button:active::after {
+  opacity: 0.12;
+}
+button:disabled {
+  opacity: 0.38;
+  cursor: default;
+}
+
+.btn-filled,
+.btn-tonal,
+.btn-outlined,
+.btn-text {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  height: 32px;
+  padding: 0 14px 0 10px;
+  border-radius: var(--radius-full);
+  font-weight: 600;
+  font-size: 13px;
+  letter-spacing: 0.01em;
+  white-space: nowrap;
+}
+.btn-filled {
+  background: var(--md-primary);
+  color: var(--md-on-primary);
+}
+.btn-filled.live {
+  background: var(--live);
+  color: #2b0505;
+}
+.btn-tonal {
+  background: var(--md-secondary-container);
+  color: var(--md-on-secondary-container);
+}
+.btn-outlined {
+  border: 1px solid var(--md-outline);
+  color: var(--md-primary);
+}
+.btn-text {
+  color: var(--md-primary);
+  padding: 0 10px;
+}
+.btn-icon {
+  width: 32px;
+  height: 32px;
+  border-radius: var(--radius-full);
+  display: inline-grid;
+  place-items: center;
+  color: var(--md-on-surface-variant);
+}
+.btn-icon.small {
+  width: 26px;
+  height: 26px;
+}

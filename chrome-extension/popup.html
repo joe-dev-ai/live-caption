@@ -1,0 +1,40 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <title>Live Caption Typer</title>
+    <link rel="stylesheet" href="popup.css" />
+  </head>
+  <body>
+    <header>
+      <img src="icons/connected-32.png" alt="" width="24" height="24" />
+      <h1>Live Caption Typer</h1>
+    </header>
+    <div class="status" id="status" data-state="disconnected">
+      <span class="dot"></span>
+      <span id="status-text">Not connected</span>
+    </div>
+    <p class="detail" id="detail"></p>
+
+    <form id="pair-form">
+      <label>
+        <span>Pairing token</span>
+        <input id="token" type="text" autocomplete="off" spellcheck="false" placeholder="XXXX-XXXX-XXXX-XXXX" required />
+      </label>
+      <label class="port">
+        <span>Port</span>
+        <input id="port" type="number" min="1024" max="65535" required />
+      </label>
+      <div class="buttons">
+        <button type="submit" class="filled">Save &amp; connect</button>
+        <button type="button" class="text" id="reconnect">Reconnect</button>
+      </div>
+    </form>
+    <p class="help">
+      Find the token in the desktop app under <b>Settings → Type into Chrome</b>. While captioning is running, each
+      caption is typed into the focused text field of the active tab. Enter is never pressed and password fields are
+      never touched.
+    </p>
+    <script src="popup.js" type="module"></script>
+  </body>
+</html>
