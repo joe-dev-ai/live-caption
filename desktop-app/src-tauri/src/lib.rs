@@ -290,10 +290,12 @@ fn apply_settings(app: &AppHandle, state: &AppState, new: Settings) -> Result<Se
         old.hotkey_toggle.as_str(),
         old.hotkey_show_hide.as_str(),
         old.hotkey_typing.as_str(),
+        old.hotkey_copy.as_str(),
     ) != (
         new.hotkey_toggle.as_str(),
         new.hotkey_show_hide.as_str(),
         new.hotkey_typing.as_str(),
+        new.hotkey_copy.as_str(),
     ) {
         register_hotkeys(app, &new);
     }
@@ -305,10 +307,11 @@ fn register_hotkeys(app: &AppHandle, s: &Settings) {
     let gs = app.global_shortcut();
     let _ = gs.unregister_all();
     let mut errors = Vec::new();
-    let bindings: [(&str, &str, &str); 3] = [
+    let bindings: [(&str, &str, &str); 4] = [
         ("Start / Stop", &s.hotkey_toggle, "toggle"),
         ("Show / Hide", &s.hotkey_show_hide, "show_hide"),
         ("Typing on/off", &s.hotkey_typing, "typing"),
+        ("Copy captions", &s.hotkey_copy, "copy"),
     ];
     for (label, keys, action) in bindings {
         let keys = keys.trim();
@@ -326,6 +329,10 @@ fn register_hotkeys(app: &AppHandle, s: &Settings) {
                 }
                 "show_hide" => toggle_overlay(app),
                 "typing" => toggle_typing(app),
+                // The overlay knows the caption selection, so it does the copying.
+                "copy" => {
+                    let _ = app.emit_to("main", "copy-captions", ());
+                }
                 _ => {}
             }
         });

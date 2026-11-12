@@ -155,7 +155,7 @@ Extension icon states:
 | **Chrome** chip | Toggle typing into Chrome (green: extension connected, amber: offline, grey: typing off) |
 | **Jump Desktop** chip | Green: Jump Desktop found. Amber: "Jump Desktop not detected" |
 | Scroll in the caption area | Reread earlier captions from this session. New captions keep arriving at the bottom; **↓ Latest** jumps back to them |
-| Drag over captions, then **⧉ Copy** | Copies the selected text, or all captions if nothing is selected. Paste it anywhere, including on the remote computer through Jump Desktop. (Ctrl+C can't work here: the overlay never takes keyboard focus, so Chrome keeps it.) |
+| Drag over captions, then **⧉ Copy** or **Ctrl+Alt+C** | Copies the selected text, or all captions if nothing is selected. Paste it anywhere, including on the remote computer through Jump Desktop. (Ctrl+C can't work here: the overlay never takes keyboard focus, so Chrome keeps it.) |
 | **Clear** (broom icon) | Empties the caption area; captioning keeps running |
 | ⚙ | Settings |
 | — | Minimize to tray (closing the window also hides it to the tray) |
@@ -174,6 +174,7 @@ Left-click the tray icon to show or hide the overlay.
 | Ctrl+Alt+Q | Start / Stop captioning |
 | Ctrl+Alt+H | Show / Hide the overlay |
 | Ctrl+Alt+T | Turn typing into Chrome on or off |
+| Ctrl+Alt+C | Copy the selected captions, or all of them (same as the Copy button) |
 
 ---
 
@@ -194,7 +195,7 @@ Changes save automatically and apply right away. They are stored in
 | | *Puter only:* Use recent text as context (sends the last 1–2 sentences as the prompt) | On |
 | | *Puter only:* Parallel requests for final text (1–3; Puter's free plan allows 3 at once in total, live previews included) | 3 |
 | Type into Chrome | On/off, **Type the live preview immediately** (fastest; corrected in place), pairing token (Copy / New token), local port | On, on, random token, 47821 |
-| Hotkeys | Start/Stop, Show/Hide, Typing on/off (click a field, press the keys; Backspace clears it) | see above |
+| Hotkeys | Start/Stop, Show/Hide, Typing on/off, Copy captions (click a field, press the keys; Backspace clears it) | see above |
 | Appearance | Font size, background opacity, debug info. The caption area keeps the whole session: scroll up to reread, and click **Latest** to jump back | 26 px, 60 %, off |
 | Transcript | Save a `.txt` file with timestamps (a new file each time you press Start); folder | Off, `Documents\Live Captions` |
 | Puter account (Puter engine only) | Who is signed in, how much of this month's free allowance is used (bar, dollars left, about how many hours of captioning that covers at the current settings), and Sign out | — |
@@ -343,7 +344,7 @@ cd desktop-app
 npm test
 npm run typecheck
 
-# Back end: resampler, PCM packetising, settings, clipboard text, WebSocket bridge integration tests (20 tests)
+# Back end: resampler, PCM packetising, settings, clipboard text, WebSocket bridge integration tests (21 tests)
 cd src-tauri
 cargo test
 
@@ -405,7 +406,7 @@ cargo run --example bridge_server -- 47821 TEST-TOKE-N123-4567
 | Chrome chip says "Chrome offline" | Make sure the extension is installed and paired. Click its icon, then **Reconnect**. If you changed the port, enter the same port in the popup. |
 | "Cannot listen on 127.0.0.1:47821" | Another program uses the port. Change Settings → Type into Chrome → Local port, and enter the same port in the popup. |
 | "No text field focused" | Click into a text box in the active Chrome tab. Password fields are never typed into. |
-| Copied captions don't paste on the remote computer | Make sure clipboard sharing is on in Jump Desktop's connection settings. Copy again with **⧉ Copy**, then paste on the remote computer. |
+| Copied captions don't paste on the remote computer | Make sure clipboard sharing is on in Jump Desktop's connection settings. Copy again with **⧉ Copy** or Ctrl+Alt+C, then paste on the remote computer. If Ctrl+Alt+C does nothing while the Jump Desktop window is in front, Jump Desktop is passing the keys to the remote computer: click the Copy icon instead, or pick another hotkey in Settings. |
 | "Chrome extension not connected" (Chrome engine) | Start Chrome, and make sure the extension is installed (Load unpacked again after updating the folder) and paired. |
 | "Chrome speech: no connection" | The online service can't be reached. Check the internet connection, or download the on-device model in the extension popup. |
 | "Chrome 135 or later is needed" | Update Chrome (⋮ → Help → About Google Chrome), or switch Settings → Speech engine to Puter. |

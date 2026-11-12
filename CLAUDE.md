@@ -130,14 +130,14 @@ pipeline, UI, or extension.
   draggable by the top bar. Size, position and settings are remembered between launches.
 * The caption area keeps the whole history (up to 1000 lines) with a visible scrollbar. It follows new text while
   scrolled to the bottom; when the user scrolls up or selects text it stays put and shows a "Latest" button.
-  Captions are selectable. The Copy button copies the selection (or everything) through the native clipboard,
-  because the overlay never has keyboard focus. On Windows the overlay window must own the copied text (never an
-  ownerless clipboard), or Jump Desktop doesn't forward it to the remote computer. Clear empties the view without
-  stopping captioning.
+  Captions are selectable. The Copy button and the Copy hotkey copy the selection (or everything) through the
+  native clipboard, because the overlay never has keyboard focus. On Windows the overlay window must own the copied
+  text (never an ownerless clipboard), or Jump Desktop doesn't forward it to the remote computer. Clear empties the
+  view without stopping captioning.
 * The overlay must **never steal keyboard focus from Chrome**: keep `focusable(false)` and the Windows focus guard.
-  Global hotkeys are configurable (default Ctrl+Alt+Q for Start/Stop). Never use a plain key or an Alt-only
-  combination as a default: Windows can't register plain keys, and Alt-only combinations move Chrome's focus to its
-  menu.
+  Global hotkeys are configurable (defaults: Ctrl+Alt+Q Start/Stop, Ctrl+Alt+H Show/Hide, Ctrl+Alt+T typing on/off,
+  Ctrl+Alt+C Copy). Never use a plain key or an Alt-only combination as a default: Windows can't register plain
+  keys, and Alt-only combinations move Chrome's focus to its menu.
 * Tray menu: Show/Hide, Start/Stop, Settings, Quit. Closing the window hides it to the tray. The tray icon changes
   while captioning is active.
 

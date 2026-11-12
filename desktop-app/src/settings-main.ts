@@ -34,7 +34,7 @@ const BOOL_KEYS: BoolKey[] = [
 ];
 const RANGE_KEYS: NumKey[] = ["maxParallel", "fontSize", "bgOpacity"];
 const TEXT_KEYS: StrKey[] = ["jumpProcessNames", "transcriptDir"];
-const HOTKEY_KEYS: StrKey[] = ["hotkeyToggle", "hotkeyShowHide", "hotkeyTyping"];
+const HOTKEY_KEYS: StrKey[] = ["hotkeyToggle", "hotkeyShowHide", "hotkeyTyping", "hotkeyCopy"];
 
 function setSaveState(text: string, error = false): void {
   const el = $("save-state");

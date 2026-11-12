@@ -62,6 +62,8 @@ pub struct Settings {
     pub hotkey_toggle: String,
     pub hotkey_show_hide: String,
     pub hotkey_typing: String,
+    /// Copies the selected captions (or all of them), like the Copy button.
+    pub hotkey_copy: String,
     pub font_size: u32,
     pub bg_opacity: f64,
     pub save_transcript: bool,
@@ -100,6 +102,7 @@ impl Default for Settings {
             hotkey_toggle: DEFAULT_TOGGLE_HOTKEY.into(),
             hotkey_show_hide: "Ctrl+Alt+H".into(),
             hotkey_typing: "Ctrl+Alt+T".into(),
+            hotkey_copy: "Ctrl+Alt+C".into(),
             font_size: 26,
             bg_opacity: 0.6,
             save_transcript: false,
@@ -241,6 +244,15 @@ mod tests {
         }
         .sanitized();
         assert_eq!(custom.hotkey_toggle, "Ctrl+Shift+F9");
+    }
+
+    #[test]
+    fn copy_hotkey_defaults_to_ctrl_alt_c_also_for_older_settings_files() {
+        assert_eq!(Settings::default().hotkey_copy, "Ctrl+Alt+C");
+        let old: Settings = serde_json::from_str(r#"{ "hotkeyToggle": "Ctrl+Alt+Q" }"#).unwrap();
+        assert_eq!(old.hotkey_copy, "Ctrl+Alt+C");
+        let off: Settings = serde_json::from_str(r#"{ "hotkeyCopy": "" }"#).unwrap();
+        assert_eq!(off.hotkey_copy, "");
     }
 
     #[test]

@@ -23,6 +23,7 @@ export interface Settings {
   hotkeyToggle: string;
   hotkeyShowHide: string;
   hotkeyTyping: string;
+  hotkeyCopy: string;
   fontSize: number;
   bgOpacity: number;
   saveTranscript: boolean;

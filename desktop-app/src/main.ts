@@ -416,6 +416,7 @@ function render(): void {
   ui.toggle.innerHTML = state.active ? `${icon("stop")}<span>Stop</span>` : `${icon("play")}<span>Start</span>`;
   ui.toggle.classList.toggle("live", state.active);
   ui.toggle.title = `${state.active ? "Stop" : "Start"} captioning${s?.hotkeyToggle ? ` (${s.hotkeyToggle})` : ""}`;
+  ui.copy.title = `Copy the selected captions (or all of them)${s?.hotkeyCopy ? ` (${s.hotkeyCopy})` : ""}`;
 
   // Audio source chip
   if (state.testAudio) {
@@ -582,6 +583,17 @@ async function applySettings(next: Settings): Promise<void> {
 
 // ------------------------------------------------------------- wiring
 
+/** Copy button and Copy hotkey: the selected captions, or all of them. */
+function copyCaptions(): void {
+  const selected = captions.selectedText();
+  const text = selected || captions.allText();
+  if (!text) return flash("No captions to copy yet", 2500, "info");
+  backend
+    .copyText(text)
+    .then(() => flash(selected ? "Copied the selected text" : "Copied all captions", 2500, "info"))
+    .catch((e) => flash(`Copy failed: ${errorText(e)}`));
+}
+
 function noFocus(el: HTMLElement): void {
   // Keep clicks from moving focus inside the web view.
   el.addEventListener("mousedown", (e) => e.preventDefault());
@@ -599,15 +611,7 @@ function wireUi(): void {
   }
 
   ui.toggle.addEventListener("click", () => toggle(true));
-  ui.copy.addEventListener("click", () => {
-    const selected = captions.selectedText();
-    const text = selected || captions.allText();
-    if (!text) return flash("No captions to copy yet", 2500, "info");
-    backend
-      .copyText(text)
-      .then(() => flash(selected ? "Copied the selected text" : "Copied all captions", 2500, "info"))
-      .catch((e) => flash(`Copy failed: ${errorText(e)}`));
-  });
+  ui.copy.addEventListener("click", copyCaptions);
   ui.clear.addEventListener("click", () => {
     captions.clear();
     renderCaptions();
@@ -694,6 +698,7 @@ async function main(): Promise<void> {
       render();
     }),
     on("toggle-captioning", () => toggle(false)),
+    on("copy-captions", copyCaptions),
     on("puter-status-request", () => {
       publishPuter();
       void refreshAllowance(); // fresh numbers whenever Settings opens
