@@ -155,7 +155,7 @@ Extension icon states:
 | **Chrome** chip | Toggle typing into Chrome (green: extension connected, amber: offline, grey: typing off) |
 | **Jump Desktop** chip | Green: Jump Desktop found. Amber: "Jump Desktop not detected" |
 | Scroll in the caption area | Reread earlier captions from this session. New captions keep arriving at the bottom; **↓ Latest** jumps back to them |
-| Drag over captions, then **⧉ Copy** | Copies the selected text, or all captions if nothing is selected. (Ctrl+C can't work here: the overlay never takes keyboard focus, so Chrome keeps it.) |
+| Drag over captions, then **⧉ Copy** | Copies the selected text, or all captions if nothing is selected. Paste it anywhere, including on the remote computer through Jump Desktop. (Ctrl+C can't work here: the overlay never takes keyboard focus, so Chrome keeps it.) |
 | **Clear** (broom icon) | Empties the caption area; captioning keeps running |
 | ⚙ | Settings |
 | — | Minimize to tray (closing the window also hides it to the tray) |
@@ -287,6 +287,9 @@ p90), the average speech→text delay, requests in flight, and how many chunks w
   (compared in constant time, with a delay after a wrong token). Text is forwarded only while typing is active and
   only for the current session id, so nothing from before a Stop can be typed after it. Clients say whether they
   type text (the service worker) or recognize speech (the speech page, which receives the audio).
+* **Copy** (`clipboard.rs`): on Windows the text is put on the clipboard with the overlay window as its owner, the
+  way Notepad does it. Text on an ownerless clipboard (what a generic clipboard library leaves behind) isn't forwarded
+  by remote-desktop clients such as Jump Desktop.
 * The extension's service worker (`background.js`) keeps the connection alive. It pings every 20 s, reconnects
   with back-off, and a 30 s alarm wakes it if Chrome stopped it. For each chunk it finds the frame that holds the
   caret (checking iframes, cross-origin frames, and open shadow DOM too) and calls `content.js`. It applies
@@ -340,7 +343,7 @@ cd desktop-app
 npm test
 npm run typecheck
 
-# Back end: resampler, PCM packetising, settings, WebSocket bridge integration tests (18 tests)
+# Back end: resampler, PCM packetising, settings, clipboard text, WebSocket bridge integration tests (20 tests)
 cd src-tauri
 cargo test
 
@@ -402,6 +405,7 @@ cargo run --example bridge_server -- 47821 TEST-TOKE-N123-4567
 | Chrome chip says "Chrome offline" | Make sure the extension is installed and paired. Click its icon, then **Reconnect**. If you changed the port, enter the same port in the popup. |
 | "Cannot listen on 127.0.0.1:47821" | Another program uses the port. Change Settings → Type into Chrome → Local port, and enter the same port in the popup. |
 | "No text field focused" | Click into a text box in the active Chrome tab. Password fields are never typed into. |
+| Copied captions don't paste on the remote computer | Make sure clipboard sharing is on in Jump Desktop's connection settings. Copy again with **⧉ Copy**, then paste on the remote computer. |
 | "Chrome extension not connected" (Chrome engine) | Start Chrome, and make sure the extension is installed (Load unpacked again after updating the folder) and paired. |
 | "Chrome speech: no connection" | The online service can't be reached. Check the internet connection, or download the on-device model in the extension popup. |
 | "Chrome 135 or later is needed" | Update Chrome (⋮ → Help → About Google Chrome), or switch Settings → Speech engine to Puter. |

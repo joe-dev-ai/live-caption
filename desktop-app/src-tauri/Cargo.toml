@@ -18,7 +18,6 @@ tauri = { version = "2", features = ["tray-icon", "image-png"] }
 tauri-plugin-global-shortcut = "2"
 tauri-plugin-window-state = "2"
 tauri-plugin-single-instance = "2"
-tauri-plugin-clipboard-manager = "2"
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 tokio = { version = "1", features = ["net", "sync", "time", "macros", "rt"] }
@@ -30,12 +29,18 @@ getrandom = "0.3"
 wasapi = "0.27"
 windows = { version = "0.62", features = [
   "Win32_Foundation",
+  "Win32_System_DataExchange",
   "Win32_System_Diagnostics_ToolHelp",
+  "Win32_System_Memory",
   "Win32_System_Threading",
   "Win32_UI_Accessibility",
   "Win32_UI_Input_KeyboardAndMouse",
   "Win32_UI_WindowsAndMessaging",
 ] }
+
+# Windows writes the clipboard itself (src/clipboard.rs).
+[target.'cfg(not(windows))'.dependencies]
+tauri-plugin-clipboard-manager = "2"
 
 [profile.release]
 codegen-units = 1

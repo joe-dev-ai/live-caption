@@ -6,12 +6,15 @@
 //! * `settings`   – persisted settings
 //! * `tray`       – tray icon + menu
 //! * `focus`      – keeps Chrome focused when the overlay is clicked (Windows)
+//! * `clipboard`  – copies captions with the overlay as clipboard owner (Windows)
 //! * `transcript` – optional .txt transcript
 //!
-//! Speech-to-text itself runs in the overlay web view (Puter.js).
+//! Speech-to-text itself runs in the Chrome extension (Chrome engine) or in
+//! the overlay web view (Puter engine).
 
 mod audio;
 pub mod bridge;
+mod clipboard;
 #[cfg(windows)]
 mod focus;
 mod process;
@@ -30,6 +33,7 @@ use std::time::Duration;
 use tauri::ipc::{Channel, InvokeResponseBody};
 use tauri::webview::{NewWindowFeatures, NewWindowResponse};
 use tauri::{AppHandle, Emitter, Manager, State, WebviewUrl, WebviewWindow, WebviewWindowBuilder, WindowEvent, Wry};
+#[cfg(not(windows))]
 use tauri_plugin_clipboard_manager::ClipboardExt;
 use tauri_plugin_global_shortcut::{GlobalShortcutExt, ShortcutState};
 use tauri_plugin_window_state::{AppHandleExt, StateFlags};
@@ -217,6 +221,16 @@ fn suspend_hotkeys(app: AppHandle, state: State<AppState>, suspended: bool) {
 /// never has keyboard focus, which the web clipboard API requires.
 #[tauri::command]
 fn copy_text(app: AppHandle, text: String) -> Result<(), String> {
+    // On Windows the overlay window owns the copied text, so remote-desktop
+    // clients such as Jump Desktop forward it (see `clipboard`). This sync
+    // command runs on the main thread, which owns that window.
+    #[cfg(windows)]
+    {
+        let overlay = app.get_webview_window("main").ok_or("the caption window is not open")?;
+        let hwnd = overlay.hwnd().map_err(|e| e.to_string())?;
+        clipboard::write_text(windows::Win32::Foundation::HWND(hwnd.0), &text)
+    }
+    #[cfg(not(windows))]
     app.clipboard().write_text(text).map_err(|e| e.to_string())
 }
 
@@ -473,14 +487,17 @@ fn spawn_jump_monitor(app: AppHandle, jump: Arc<Mutex<JumpStatus>>) {
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
-    tauri::Builder::default()
+    let builder = tauri::Builder::default();
+    // Windows writes the clipboard itself (see `clipboard`).
+    #[cfg(not(windows))]
+    let builder = builder.plugin(tauri_plugin_clipboard_manager::init());
+    builder
         .plugin(tauri_plugin_single_instance::init(|app, _args, _cwd| {
             if let Some(w) = app.get_webview_window("main") {
                 let _ = w.show();
             }
         }))
         .plugin(tauri_plugin_global_shortcut::Builder::new().build())
-        .plugin(tauri_plugin_clipboard_manager::init())
         .plugin(
             tauri_plugin_window_state::Builder::new()
                 .with_state_flags(StateFlags::SIZE | StateFlags::POSITION)
