@@ -57,6 +57,8 @@ struct AppState {
     tray: Mutex<Option<tray::Tray>>,
     jump: Arc<Mutex<JumpStatus>>,
     hotkey_errors: Mutex<Vec<String>>,
+    /// Whether Ctrl+C currently copies the selected captions (see `set_copy_key`).
+    copy_key_borrowed: Mutex<bool>,
 }
 
 #[derive(Serialize, Clone, Debug, PartialEq, Default)]
@@ -217,6 +219,31 @@ fn suspend_hotkeys(app: AppHandle, state: State<AppState>, suspended: bool) {
     }
 }
 
+/// Plain Ctrl+C copies the selected captions. The overlay never has keyboard
+/// focus, so Ctrl+C is borrowed as a global hotkey, but only while the pointer
+/// is over the overlay and caption text is selected; everywhere else it keeps
+/// working as usual.
+const COPY_KEY: &str = "Ctrl+C";
+
+#[tauri::command]
+fn set_copy_key(app: AppHandle, state: State<AppState>, borrowed: bool) {
+    *state.copy_key_borrowed.lock().unwrap() = borrowed;
+    apply_copy_key(&app, borrowed);
+}
+
+fn apply_copy_key(app: &AppHandle, borrowed: bool) {
+    let gs = app.global_shortcut();
+    if !borrowed {
+        let _ = gs.unregister(COPY_KEY);
+    } else if !gs.is_registered(COPY_KEY) {
+        let _ = gs.on_shortcut(COPY_KEY, |app, _shortcut, event| {
+            if event.state() == ShortcutState::Pressed {
+                let _ = app.emit_to("main", "copy-captions", ());
+            }
+        });
+    }
+}
+
 /// Copy caption text to the clipboard. Done natively because the overlay
 /// never has keyboard focus, which the web clipboard API requires. Returns
 /// whether the text was also handed to Jump Desktop for the remote computer.
@@ -349,7 +376,12 @@ fn register_hotkeys(app: &AppHandle, s: &Settings) {
             errors.push(hotkey_problem(label, keys, &e.to_string()));
         }
     }
-    *app.state::<AppState>().hotkey_errors.lock().unwrap() = errors;
+    let state = app.state::<AppState>();
+    *state.hotkey_errors.lock().unwrap() = errors;
+    // unregister_all() above also released a borrowed Ctrl+C.
+    if *state.copy_key_borrowed.lock().unwrap() {
+        apply_copy_key(app, true);
+    }
 }
 
 /// Plain-language explanation of why a hotkey could not be registered.
@@ -547,6 +579,7 @@ pub fn run() {
                 tray: Mutex::new(None),
                 jump: jump.clone(),
                 hotkey_errors: Mutex::new(Vec::new()),
+                copy_key_borrowed: Mutex::new(false),
             });
             register_hotkeys(&handle, &settings);
             let tray = tray::Tray::create(&handle)?;
@@ -575,6 +608,7 @@ pub fn run() {
             app_info,
             hotkey_errors,
             suspend_hotkeys,
+            set_copy_key,
             copy_text,
             open_settings,
             hide_overlay,

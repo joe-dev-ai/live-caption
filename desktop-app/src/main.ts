@@ -32,6 +32,7 @@ import {
 import { TypingPlanner } from "./pipeline/typing.ts";
 import { wordErrorRate } from "./pipeline/wer.ts";
 import { CaptionView } from "./ui/captions.ts";
+import { CopyKey } from "./ui/copy-key.ts";
 import { icon } from "./ui/icons.ts";
 
 // ------------------------------------------------------------------ state
@@ -416,7 +417,9 @@ function render(): void {
   ui.toggle.innerHTML = state.active ? `${icon("stop")}<span>Stop</span>` : `${icon("play")}<span>Start</span>`;
   ui.toggle.classList.toggle("live", state.active);
   ui.toggle.title = `${state.active ? "Stop" : "Start"} captioning${s?.hotkeyToggle ? ` (${s.hotkeyToggle})` : ""}`;
-  ui.copy.title = `Copy the selected captions (or all of them)${s?.hotkeyCopy ? ` (${s.hotkeyCopy})` : ""}`;
+  ui.copy.title =
+    `Copy the selected captions (or all of them)${s?.hotkeyCopy ? ` (${s.hotkeyCopy})` : ""}. ` +
+    "Ctrl+C also works while the pointer is on selected captions.";
 
   // Audio source chip
   if (state.testAudio) {
@@ -583,7 +586,7 @@ async function applySettings(next: Settings): Promise<void> {
 
 // ------------------------------------------------------------- wiring
 
-/** Copy button and Copy hotkey: the selected captions, or all of them. */
+/** Copy button, Copy hotkey and Ctrl+C: the selected captions, or all of them. */
 function copyCaptions(): void {
   const selected = captions.selectedText();
   const text = selected || captions.allText();
@@ -595,6 +598,20 @@ function copyCaptions(): void {
       flash(remote ? `${what} (also for the remote computer)` : what, 2500, "info");
     })
     .catch((e) => flash(`Copy failed: ${errorText(e)}`));
+}
+
+const copyKey = new CopyKey((borrowed) => void backend.setCopyKey(borrowed));
+
+/** Ctrl+C copies selected captions while the pointer is over the overlay. */
+function wireCopyKey(): void {
+  const root = document.documentElement;
+  root.addEventListener("mouseenter", () => copyKey.hover(true));
+  root.addEventListener("mouseleave", () => copyKey.hover(false));
+  // Hiding the overlay doesn't always report the pointer leaving it.
+  document.addEventListener("visibilitychange", () => {
+    if (document.hidden) copyKey.hover(false);
+  });
+  document.addEventListener("selectionchange", () => copyKey.selection(!!captions.selectedText()));
 }
 
 function noFocus(el: HTMLElement): void {
@@ -615,6 +632,7 @@ function wireUi(): void {
 
   ui.toggle.addEventListener("click", () => toggle(true));
   ui.copy.addEventListener("click", copyCaptions);
+  wireCopyKey();
   ui.clear.addEventListener("click", () => {
     captions.clear();
     renderCaptions();

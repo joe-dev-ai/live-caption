@@ -130,8 +130,9 @@ pipeline, UI, or extension.
   draggable by the top bar. Size, position and settings are remembered between launches.
 * The caption area keeps the whole history (up to 1000 lines) with a visible scrollbar. It follows new text while
   scrolled to the bottom; when the user scrolls up or selects text it stays put and shows a "Latest" button.
-  Captions are selectable. The Copy button and the Copy hotkey copy the selection (or everything) through the
-  native clipboard, because the overlay never has keyboard focus. Clear empties the view without stopping captioning.
+  Captions are selectable. The Copy button, the Copy hotkey and Ctrl+C copy the selection (or everything) through
+  the native clipboard, because the overlay never has keyboard focus. Ctrl+C is borrowed as a global hotkey only while
+  the pointer is over the overlay and caption text is selected. Clear empties the view without stopping captioning.
 * Copied text must reach the remote computer: on Windows the overlay window owns the copied text, and because Jump
   Desktop reads the local clipboard only when its window is activated, a copy made while a Jump Desktop window is in
   front briefly activates an off-screen helper window and gives the foreground straight back.

@@ -28,6 +28,7 @@ export const backend = {
   openSettings: () => invoke<void>("open_settings"),
   /** Resolves to true when the text was also handed to Jump Desktop for the remote computer. */
   copyText: (text: string) => invoke<boolean>("copy_text", { text }),
+  setCopyKey: (borrowed: boolean) => invoke<void>("set_copy_key", { borrowed }),
   hideOverlay: () => invoke<void>("hide_overlay"),
   transcriptBegin: (stamp: string) => invoke<string | null>("transcript_begin", { stamp }),
   transcriptAppend: (line: string) => invoke<void>("transcript_append", { line }),
