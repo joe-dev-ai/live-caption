@@ -590,7 +590,10 @@ function copyCaptions(): void {
   if (!text) return flash("No captions to copy yet", 2500, "info");
   backend
     .copyText(text)
-    .then(() => flash(selected ? "Copied the selected text" : "Copied all captions", 2500, "info"))
+    .then((remote) => {
+      const what = selected ? "Copied the selected text" : "Copied all captions";
+      flash(remote ? `${what} (also for the remote computer)` : what, 2500, "info");
+    })
     .catch((e) => flash(`Copy failed: ${errorText(e)}`));
 }
 

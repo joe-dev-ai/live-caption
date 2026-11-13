@@ -1,10 +1,19 @@
-//! Copies caption text to the Windows clipboard the way ordinary programs
-//! such as Notepad do: with one of our windows as the clipboard owner.
+//! Copies caption text to the Windows clipboard so that it can also be pasted
+//! on the remote computer in Jump Desktop.
 //!
-//! The clipboard plugin opens the clipboard without a window, which leaves the
-//! clipboard without an owner after it is written. Remote-desktop clients such
-//! as Jump Desktop then don't forward the text to the remote computer: pasting
-//! there did nothing until the same text was copied again from Notepad.
+//! * The text is written the way ordinary programs such as Notepad do it,
+//!   with one of our windows as the clipboard owner (the clipboard plugin
+//!   leaves the clipboard without an owner).
+//! * Jump Desktop sends the local clipboard to the remote computer when its
+//!   window is activated, not when the clipboard changes. The overlay never
+//!   takes focus, so after copying from it Jump Desktop kept sending the old
+//!   text; clicking the taskbar and back into Jump Desktop made it work.
+//!   [`hand_to_jump_desktop`] does that switch automatically.
+
+/// How long Jump Desktop's window stays in the background during the hand-off,
+/// so it handles losing the foreground before it gets it back.
+#[cfg(windows)]
+const HAND_OFF_PAUSE: std::time::Duration = std::time::Duration::from_millis(60);
 
 /// Text as Windows expects it on the clipboard: CRLF line breaks, UTF-16,
 /// NUL-terminated.
@@ -56,6 +65,63 @@ pub fn write_text(owner: windows::Win32::Foundation::HWND, text: &str) -> Result
             }
         }
     }
+}
+
+/// If a Jump Desktop window (one of `jump_names`) is in front, briefly
+/// activate a tiny off-screen window of ours and give the foreground straight
+/// back, so Jump Desktop reads the new clipboard and sends it to the remote
+/// computer. Returns whether the hand-off started. Other programs, Chrome
+/// included, are never touched. Must run on the main thread.
+#[cfg(windows)]
+pub fn hand_to_jump_desktop(app: &tauri::AppHandle, jump_names: &[String]) -> bool {
+    use windows::core::w;
+    use windows::Win32::Foundation::HWND;
+    use windows::Win32::UI::WindowsAndMessaging::{
+        CreateWindowExW, DestroyWindow, GetForegroundWindow, SetForegroundWindow, WS_EX_TOOLWINDOW, WS_POPUP,
+        WS_VISIBLE,
+    };
+
+    let jump = unsafe { GetForegroundWindow() };
+    let is_jump = crate::process::window_exe(jump).is_some_and(|exe| crate::process::is_jump_exe(&exe, jump_names));
+    if !is_jump {
+        return false;
+    }
+    // A 1×1 tool window far off screen: no taskbar button, nothing visible.
+    let Ok(helper) = (unsafe {
+        CreateWindowExW(
+            WS_EX_TOOLWINDOW,
+            w!("STATIC"),
+            w!(""),
+            WS_POPUP | WS_VISIBLE,
+            -32000,
+            -32000,
+            1,
+            1,
+            None,
+            None,
+            None,
+            None,
+        )
+    }) else {
+        return false;
+    };
+    // Allowed because the user just clicked the overlay or pressed our hotkey.
+    if !unsafe { SetForegroundWindow(helper) }.as_bool() {
+        let _ = unsafe { DestroyWindow(helper) };
+        return false;
+    }
+    // Window handles aren't Send; pass them as plain numbers.
+    let (jump, helper) = (jump.0 as isize, helper.0 as isize);
+    let app = app.clone();
+    std::thread::spawn(move || {
+        std::thread::sleep(HAND_OFF_PAUSE);
+        // The helper belongs to the main thread, so it must be destroyed there.
+        let _ = app.run_on_main_thread(move || unsafe {
+            let _ = SetForegroundWindow(HWND(jump as _));
+            let _ = DestroyWindow(HWND(helper as _));
+        });
+    });
+    true
 }
 
 /// Open the clipboard for `owner`. Other programs, often the remote-desktop

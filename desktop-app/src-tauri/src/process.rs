@@ -74,3 +74,53 @@ pub fn is_alive(pid: u32) -> bool {
 pub fn find_jump_desktop(_names: &[String]) -> Option<ProcInfo> {
     None
 }
+
+/// Whether the executable at `path` is one of `names` (lower-case file names,
+/// e.g. "jumpdesktop.exe").
+#[cfg(any(windows, test))]
+pub fn is_jump_exe(path: &str, names: &[String]) -> bool {
+    let file = path.rsplit(['\\', '/']).next().unwrap_or(path).to_lowercase();
+    names.contains(&file)
+}
+
+/// Full path of the executable that owns `window`.
+#[cfg(windows)]
+pub fn window_exe(window: windows::Win32::Foundation::HWND) -> Option<String> {
+    use windows::core::PWSTR;
+    use windows::Win32::Foundation::CloseHandle;
+    use windows::Win32::System::Threading::{
+        OpenProcess, QueryFullProcessImageNameW, PROCESS_NAME_WIN32, PROCESS_QUERY_LIMITED_INFORMATION,
+    };
+    use windows::Win32::UI::WindowsAndMessaging::GetWindowThreadProcessId;
+
+    let mut pid = 0u32;
+    unsafe {
+        GetWindowThreadProcessId(window, Some(&mut pid));
+        if pid == 0 {
+            return None;
+        }
+        let handle = OpenProcess(PROCESS_QUERY_LIMITED_INFORMATION, false, pid).ok()?;
+        let mut buf = [0u16; 1024];
+        let mut len = buf.len() as u32;
+        let ok = QueryFullProcessImageNameW(handle, PROCESS_NAME_WIN32, PWSTR(buf.as_mut_ptr()), &mut len).is_ok();
+        let _ = CloseHandle(handle);
+        ok.then(|| String::from_utf16_lossy(&buf[..len as usize]))
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::is_jump_exe;
+
+    #[test]
+    fn jump_exe_is_matched_by_file_name_in_any_case() {
+        let names = vec!["jumpdesktop.exe".to_string(), "jumpclient.exe".to_string()];
+        assert!(is_jump_exe(r"C:\Program Files\Jump Desktop\JumpDesktop.exe", &names));
+        assert!(is_jump_exe("JUMPCLIENT.EXE", &names));
+        assert!(!is_jump_exe(
+            r"C:\Program Files\Google\Chrome\Application\chrome.exe",
+            &names
+        ));
+        assert!(!is_jump_exe(r"C:\Tools\notjumpdesktop.exe", &names));
+    }
+}

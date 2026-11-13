@@ -218,20 +218,29 @@ fn suspend_hotkeys(app: AppHandle, state: State<AppState>, suspended: bool) {
 }
 
 /// Copy caption text to the clipboard. Done natively because the overlay
-/// never has keyboard focus, which the web clipboard API requires.
+/// never has keyboard focus, which the web clipboard API requires. Returns
+/// whether the text was also handed to Jump Desktop for the remote computer.
 #[tauri::command]
-fn copy_text(app: AppHandle, text: String) -> Result<(), String> {
-    // On Windows the overlay window owns the copied text, so remote-desktop
-    // clients such as Jump Desktop forward it (see `clipboard`). This sync
-    // command runs on the main thread, which owns that window.
+fn copy_text(app: AppHandle, state: State<AppState>, text: String) -> Result<bool, String> {
+    // On Windows the overlay window owns the copied text, and Jump Desktop is
+    // made to pick it up (see `clipboard`). This sync command runs on the
+    // main thread, which owns the overlay window.
     #[cfg(windows)]
     {
         let overlay = app.get_webview_window("main").ok_or("the caption window is not open")?;
         let hwnd = overlay.hwnd().map_err(|e| e.to_string())?;
-        clipboard::write_text(windows::Win32::Foundation::HWND(hwnd.0), &text)
+        clipboard::write_text(windows::Win32::Foundation::HWND(hwnd.0), &text)?;
+        let names = state.settings.lock().unwrap().jump_names();
+        Ok(clipboard::hand_to_jump_desktop(&app, &names))
     }
     #[cfg(not(windows))]
-    app.clipboard().write_text(text).map_err(|e| e.to_string())
+    {
+        let _ = state;
+        app.clipboard()
+            .write_text(text)
+            .map(|()| false)
+            .map_err(|e| e.to_string())
+    }
 }
 
 #[tauri::command]

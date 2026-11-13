@@ -288,9 +288,12 @@ p90), the average speech→text delay, requests in flight, and how many chunks w
   (compared in constant time, with a delay after a wrong token). Text is forwarded only while typing is active and
   only for the current session id, so nothing from before a Stop can be typed after it. Clients say whether they
   type text (the service worker) or recognize speech (the speech page, which receives the audio).
-* **Copy** (`clipboard.rs`): on Windows the text is put on the clipboard with the overlay window as its owner, the
-  way Notepad does it. Text on an ownerless clipboard (what a generic clipboard library leaves behind) isn't forwarded
-  by remote-desktop clients such as Jump Desktop.
+* **Copy** (`clipboard.rs`): on Windows the text is put on the clipboard with the overlay window as
+  its owner, the way Notepad does it. Jump Desktop sends the local clipboard to the remote computer when its window
+  is activated, not when the clipboard changes, and the overlay never takes focus. So when a Jump Desktop window is
+  in front, the app briefly activates a tiny off-screen window of its own and gives the foreground straight back
+  (about 0.06 s), the same as clicking the taskbar and back. It never does this when Chrome or any other program is
+  in front.
 * The extension's service worker (`background.js`) keeps the connection alive. It pings every 20 s, reconnects
   with back-off, and a 30 s alarm wakes it if Chrome stopped it. For each chunk it finds the frame that holds the
   caret (checking iframes, cross-origin frames, and open shadow DOM too) and calls `content.js`. It applies
@@ -344,7 +347,7 @@ cd desktop-app
 npm test
 npm run typecheck
 
-# Back end: resampler, PCM packetising, settings, clipboard text, WebSocket bridge integration tests (21 tests)
+# Back end: resampler, PCM packetising, settings, clipboard text, Jump Desktop process names, WebSocket bridge integration tests (22 tests)
 cd src-tauri
 cargo test
 
@@ -383,7 +386,8 @@ cargo run --example bridge_server -- 47821 TEST-TOKE-N123-4567
   100 MB goal. CPU use while idle is about 0 %.
 * **Focus.** The overlay is a non-activating window, and the app also returns focus to the previous window if the
   overlay ever becomes the foreground window. Chrome may still flicker briefly on some systems. The hotkeys avoid
-  this completely.
+  this completely. The one deliberate focus change is the Jump Desktop hand-off after a copy: Jump Desktop's window
+  loses the foreground for about 0.06 s, so its title bar may blink.
 * **Live typing corrects text after it appears.** Words typed from the preview can change a moment later when the
   final text arrives. If you send a message mid-sentence, the remaining words go into the next message. Text typed
   before you press Stop stays as it is, even if it was still provisional.
@@ -406,7 +410,7 @@ cargo run --example bridge_server -- 47821 TEST-TOKE-N123-4567
 | Chrome chip says "Chrome offline" | Make sure the extension is installed and paired. Click its icon, then **Reconnect**. If you changed the port, enter the same port in the popup. |
 | "Cannot listen on 127.0.0.1:47821" | Another program uses the port. Change Settings → Type into Chrome → Local port, and enter the same port in the popup. |
 | "No text field focused" | Click into a text box in the active Chrome tab. Password fields are never typed into. |
-| Copied captions don't paste on the remote computer | Make sure clipboard sharing is on in Jump Desktop's connection settings. Copy again with **⧉ Copy** or Ctrl+Alt+C, then paste on the remote computer. If Ctrl+Alt+C does nothing while the Jump Desktop window is in front, Jump Desktop is passing the keys to the remote computer: click the Copy icon instead, or pick another hotkey in Settings. |
+| Copied captions don't paste on the remote computer | When Jump Desktop is the window in front, the overlay confirms the copy with "(also for the remote computer)". If that's missing, Jump Desktop's window belongs to a program whose name isn't in Settings → Audio capture → Advanced: add it (Task Manager → Details). Make sure clipboard sharing is on in Jump Desktop's connection settings. As a fallback, click the taskbar and then back into Jump Desktop before pasting. If Ctrl+Alt+C does nothing while Jump Desktop is in front, Jump Desktop is passing the keys to the remote computer: click the Copy icon instead. |
 | "Chrome extension not connected" (Chrome engine) | Start Chrome, and make sure the extension is installed (Load unpacked again after updating the folder) and paired. |
 | "Chrome speech: no connection" | The online service can't be reached. Check the internet connection, or download the on-device model in the extension popup. |
 | "Chrome 135 or later is needed" | Update Chrome (⋮ → Help → About Google Chrome), or switch Settings → Speech engine to Puter. |
